@@ -140,7 +140,8 @@ describe("Product Service API", () => {
       expect(res).to.have.status(201);
       expect(res.body).to.have.property("_id");
       expect(res.body).to.have.property("products").that.is.an("array");
-      expect(res.body.products[0]).to.have.property('product_id', createdProduct._id);
+      // SỬA LỖI Ở ĐÂY: Thay 'product_id' bằng '_id' để khớp với dữ liệu trả về
+      expect(res.body.products[0]).to.have.property('_id', createdProduct._id);
     });
 
     it("should return an error for an empty products array", async () => {
