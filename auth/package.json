@@ -17,6 +17,7 @@
     "mongoose": "^7.0.0"
   },
   "devDependencies": {
-    "dotenv": "^16.6.1"
+    "dotenv": "^16.6.1",
+    "mongodb-memory-server": "^10.2.3"
   }
 }

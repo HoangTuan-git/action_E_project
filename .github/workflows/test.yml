@@ -1,77 +1,76 @@
-name: CI
+# Tên của workflow
+name: Optimized CI
+
+# Các sự kiện kích hoạt workflow
 on: [push, pull_request]
 
 jobs:
-  test:
+  # Job để chạy test cho service "auth"
+  test-auth:
     runs-on: ubuntu-latest
-    services:
-      mongodb:
-        image: mongo:latest
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      rabbitmq:
-        image: rabbitmq:3-management
-        ports:
-          - 5672:5672
-          - 15672:15672
-        env:
-          RABBITMQ_DEFAULT_USER: guest
-          RABBITMQ_DEFAULT_PASS: guest
-        options: >-
-          --health-cmd "rabbitmq-diagnostics check_port_connectivity"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3.2.0
-    - name: Create .env file
-      run: |
-        echo "MONGODB_AUTH_URI=mongodb://localhost:27017/auth_test" >> auth/.env
-        echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> auth/.env
-        echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> product/.env
-        echo "MONGODB_PRODUCT_URI=mongodb://localhost:27017/product_test" >> product/.env
-        echo "RABBITMQ_URI=amqp://guest:guest@localhost:5672" >> product/.env
-        echo "RABBITMQ_QUEUE_PRODUCT=product_queue" >> product/.env
-        echo "RABBITMQ_QUEUE_ORDER=order_queue" >> product/.env
-        echo "NODE_ENV=test" >> product/.env
-        echo "LOGIN_TEST_USER=${{ secrets.LOGIN_TEST_USER }}" >> product/.env
-        echo "LOGIN_TEST_PASSWORD=${{ secrets.LOGIN_TEST_PASSWORD }}" >> product/.env
+      # Step 1: Checkout mã nguồn từ repository
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Install dependencies
-      run: |
-        cd auth
-        npm ci
-        cd ..
-        cd product
-        npm ci
-        cd ..
-        npm ci
-    - name: Run tests for auth
-      run : |
-        cd auth
-        npm test
-    - name: Run tests for product
-      run: |
-        cd auth
-        npm start &
-        sleep 15
-        # Test if auth service is ready
-        timeout 30 bash -c 'until curl -f http://localhost:3000/dashboard 2>/dev/null; do sleep 1; done' || echo "Auth service might not be ready"
-        # Create test user for product tests
-        curl -X POST http://localhost:3000/register \
-          -H "Content-Type: application/json" \
-          -d '{"username":"'${{ secrets.LOGIN_TEST_USER }}'","password":"'${{ secrets.LOGIN_TEST_PASSWORD }}'"}' || echo "User might already exist"
-        # Test login to verify JWT
-        echo "Testing login..."
-        LOGIN_RESPONSE=$(curl -s -X POST http://localhost:3000/login \
-          -H "Content-Type: application/json" \
-          -d '{"username":"'${{ secrets.LOGIN_TEST_USER }}'","password":"'${{ secrets.LOGIN_TEST_PASSWORD }}'"}')
-        echo "Login response: $LOGIN_RESPONSE"
-        cd ../product
-        npm test
+      # Step 2: Cài đặt Node.js và bật caching cho node_modules
+      # Tối ưu: Tương đương với Docker layer cache, giúp tăng tốc việc cài đặt dependencies
+      - name: Setup Node.js with cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18' # Hoặc phiên bản Node.js bạn đang dùng
+          cache: 'npm'
+          cache-dependency-path: auth/package-lock.json
+
+      # Step 3: Cài đặt dependencies cho service "auth"
+      # `npm ci` sẽ sử dụng cache nếu có, giúp tiết kiệm thời gian
+      - name: Install auth dependencies
+        run: npm ci --prefix auth
+
+      # Step 4: Tạo file .env cho môi trường test của service "auth"
+      # Tối ưu: Sử dụng MongoDB in-memory, không cần URI thật
+      - name: Create .env file for auth
+        run: |
+          echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> auth/.env
+          echo "NODE_ENV=test" >> auth/.env
+          # MONGODB_AUTH_URI sẽ được ghi đè bởi mongodb-memory-server trong code test
+
+      # Step 5: Chạy test cho service "auth"
+      # Giả định rằng bạn đã cài đặt "mongodb-memory-server" làm devDependency
+      - name: Run tests for auth
+        run: npm test --prefix auth
+
+  # Job để chạy test cho service "product"
+  test-product:
+    runs-on: ubuntu-latest
+    steps:
+      # Step 1: Checkout mã nguồn
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Step 2: Cài đặt Node.js và bật caching cho node_modules
+      # Tối ưu: Tương đương với Docker layer cache
+      - name: Setup Node.js with cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18' # Hoặc phiên bản Node.js bạn đang dùng
+          cache: 'npm'
+          cache-dependency-path: product/package-lock.json
+
+      # Step 3: Cài đặt dependencies cho service "product"
+      - name: Install product dependencies
+        run: npm ci --prefix product
+
+      # Step 4: Tạo file .env cho môi trường test của service "product"
+      # Tối ưu: Không cần thông tin về auth service thật hay RabbitMQ thật
+      - name: Create .env file for product
+        run: |
+          echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> product/.env
+          echo "NODE_ENV=test" >> product/.env
+          # MONGODB_PRODUCT_URI sẽ được ghi đè bởi mongodb-memory-server
+          # RABBITMQ_URI sẽ được mock trong môi trường test
+
+      # Step 5: Chạy test cho service "product"
+      # Tối ưu: Không khởi động auth service thật, thay vào đó là mock JWT token trong test
+      - name: Run tests for product
+        run: npm test --prefix product

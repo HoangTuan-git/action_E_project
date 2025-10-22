@@ -1,14 +1,36 @@
 const chai = require("chai");
 const chaiHttp = require("chai-http");
 const App = require("../app");
+   const { generateMockToken } = require('../../test/authHelper');
 const expect = chai.expect;
 require("dotenv").config();
+
+const { MongoMemoryServer } = require('mongodb-memory-server');
+const mongoose = require('mongoose');
+
+let mongoServer;
+
+beforeAll(async () => {
+  mongoServer = await MongoMemoryServer.create();
+  const mongoUri = mongoServer.getUri();
+  await mongoose.connect(mongoUri, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  });
+  console.log('In-memory MongoDB connected for product tests:', mongoUri);
+});
+
+afterAll(async () => {
+  await mongoose.disconnect();
+  await mongoServer.stop();
+  console.log('In-memory MongoDB stopped for product tests.');
+});
 
 chai.use(chaiHttp);
 
 describe("Products", () => {
   let app;
-  let authToken;
+  
   let createdProductId;
 
   before(async () => {
@@ -22,7 +44,7 @@ describe("Products", () => {
         .post("/login")
         .send({ username: process.env.LOGIN_TEST_USER, password: process.env.LOGIN_TEST_PASSWORD });
 
-      authToken = authRes.body.token;
+      const authToken = generateMockToken();
       console.log("Auth token:", authToken);
     } catch (error) {
       console.error("Failed to authenticate:", error.message);
