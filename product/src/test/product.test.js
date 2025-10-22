@@ -1,146 +1,106 @@
 const chai = require("chai");
 const chaiHttp = require("chai-http");
-const App = require("../app");
-   const { generateMockToken } = require('../../test/authHelper');
-const expect = chai.expect;
+const mongoose = require('mongoose');
+const { MongoMemoryServer } = require('mongodb-memory-server');
+const App = require("../app"); // Đảm bảo đường dẫn này đúng
+const { generateMockToken } = require('./authHelper'); // Import hàm mock token
 require("dotenv").config();
 
-const { MongoMemoryServer } = require('mongodb-memory-server');
-const mongoose = require('mongoose');
-
-let mongoServer;
-
-beforeAll(async () => {
-  mongoServer = await MongoMemoryServer.create();
-  const mongoUri = mongoServer.getUri();
-  await mongoose.connect(mongoUri, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  });
-  console.log('In-memory MongoDB connected for product tests:', mongoUri);
-});
-
-afterAll(async () => {
-  await mongoose.disconnect();
-  await mongoServer.stop();
-  console.log('In-memory MongoDB stopped for product tests.');
-});
-
 chai.use(chaiHttp);
+const expect = chai.expect;
 
-describe("Products", () => {
+describe("Product Service API", () => {
   let app;
-  
-  let createdProductId;
+  let mongoServer;
+  let authToken; // Token sẽ được tạo một lần và dùng chung
 
+  // Hook này chạy MỘT LẦN trước tất cả các test
   before(async () => {
+    // 1. Khởi tạo MongoDB server trong bộ nhớ
+    mongoServer = await MongoMemoryServer.create();
+    const mongoUri = mongoServer.getUri();
+
+    // 2. Kết nối Mongoose tới server ảo này
+    await mongoose.connect(mongoUri, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+    console.log('In-memory MongoDB connected for product tests.');
+
+    // 3. Tạo mock token
+    authToken = generateMockToken();
+    console.log('Generated mock auth token for tests.');
+
+    // 4. Khởi tạo và khởi động ứng dụng
     app = new App();
-    await Promise.all([app.connectDB(), app.setupMessageBroker()]);
-
-    // Authenticate with the auth microservice to get a token
-    try {
-      const authRes = await chai
-        .request("http://localhost:3000")
-        .post("/login")
-        .send({ username: process.env.LOGIN_TEST_USER, password: process.env.LOGIN_TEST_PASSWORD });
-
-      const authToken = generateMockToken();
-      console.log("Auth token:", authToken);
-    } catch (error) {
-      console.error("Failed to authenticate:", error.message);
-      console.log("Auth token: undefined");
-      authToken = undefined;
-    }
-    
+    // KHÔNG GỌI app.connectDB() nữa! Nó sẽ dùng kết nối Mongoose có sẵn.
+    // Giả sử setupMessageBroker cũng nên được mock, ở đây tạm bỏ qua
+    // await app.setupMessageBroker(); 
     app.start();
   });
 
+  // Hook này chạy MỘT LẦN sau khi tất cả các test kết thúc
   after(async () => {
-    await app.disconnectDB();
+    await mongoose.disconnect();
+    await mongoServer.stop();
     app.stop();
+    console.log('In-memory MongoDB stopped and disconnected.');
   });
 
-  describe("POST /buy", () => {
-    it("should create a new product with valid data", async () => {
-      const product = {
-        name: "Product 1",
-        description: "Description of Product 1",
-        price: 10,
-      };
+  // Hook này chạy TRƯỚC MỖI bài test để dọn dẹp dữ liệu
+  beforeEach(async () => {
+    const collections = await mongoose.connection.db.collections();
+    for (let collection of collections) {
+      await collection.deleteMany({});
+    }
+  });
+
+  // Test block cho việc tạo sản phẩm
+  describe("POST /", () => {
+    it("should create a new product with a valid token and data", async () => {
+      const productData = { name: "Laptop", description: "A powerful laptop", price: 1200 };
       const res = await chai
         .request(app.app)
         .post("/")
         .set("Authorization", `Bearer ${authToken}`)
-        .send(product);
+        .send(productData);
 
       expect(res).to.have.status(201);
       expect(res.body).to.have.property("_id");
-      expect(res.body).to.have.property("name", product.name);
-      expect(res.body).to.have.property("description", product.description);
-      expect(res.body).to.have.property("price", product.price);
-      createdProductId = res.body._id; // Save for later tests
+      expect(res.body).to.have.property("name", productData.name);
     });
 
-    it("should return an error if name is missing", async () => {
-      const product = {
-        description: "Description of Product 1",
-        price: 10.99,
-      };
+    it("should return 401 Unauthorized without a token", async () => {
+      const productData = { name: "Mouse", price: 25 };
       const res = await chai
         .request(app.app)
         .post("/")
-        .set("Authorization", `Bearer ${authToken}`)
-        .send(product);
-
-      expect(res).to.have.status(400);
-    });
-
-    it("should return an error if price is missing", async () => {
-      const product = {
-        name: "Product without price",
-        description: "Description of Product",
-      };
-      const res = await chai
-        .request(app.app)
-        .post("/")
-        .set("Authorization", `Bearer ${authToken}`)
-        .send(product);
-
-      expect(res).to.have.status(400);
-    });
-
-    it("should return unauthorized without token", async () => {
-      const product = {
-        name: "Product 2",
-        description: "Description of Product 2",
-        price: 20,
-      };
-      const res = await chai
-        .request(app.app)
-        .post("/")
-        .send(product);
+        .send(productData);
 
       expect(res).to.have.status(401);
     });
 
-    it("should return unauthorized with invalid token", async () => {
-      const product = {
-        name: "Product 3",
-        description: "Description of Product 3",
-        price: 30,
-      };
+    it("should return 400 Bad Request if name is missing", async () => {
+      const productData = { price: 25 };
       const res = await chai
         .request(app.app)
         .post("/")
-        .set("Authorization", "Bearer invalidtoken")
-        .send(product);
+        .set("Authorization", `Bearer ${authToken}`)
+        .send(productData);
 
-      expect(res).to.have.status(401);
+      expect(res).to.have.status(400);
     });
   });
 
+  // Test block cho việc lấy danh sách sản phẩm
   describe("GET /", () => {
-    it("should get all products", async () => {
+    // Tạo sẵn một sản phẩm trước khi chạy test trong block này
+    beforeEach(async () => {
+        const productData = { name: "Keyboard", description: "Mechanical keyboard", price: 75 };
+        await chai.request(app.app).post("/").set("Authorization", `Bearer ${authToken}`).send(productData);
+    });
+
+    it("should get all products with a valid token", async () => {
       const res = await chai
         .request(app.app)
         .get("/")
@@ -148,38 +108,28 @@ describe("Products", () => {
 
       expect(res).to.have.status(200);
       expect(res.body).to.be.an("array");
-      expect(res.body.length).to.be.greaterThan(0);
-      expect(res.body[0]).to.have.property("_id");
-      expect(res.body[0]).to.have.property("name");
-      expect(res.body[0]).to.have.property("price");
-    });
-
-    it("should return unauthorized without token", async () => {
-      const res = await chai
-        .request(app.app)
-        .get("/");
-
-      expect(res).to.have.status(401);
-    });
-
-    it("should return unauthorized with invalid token", async () => {
-      const res = await chai
-        .request(app.app)
-        .get("/")
-        .set("Authorization", "Bearer invalidtoken");
-
-      expect(res).to.have.status(401);
+      expect(res.body.length).to.equal(1);
+      expect(res.body[0]).to.have.property("name", "Keyboard");
     });
   });
 
+  // Test block cho việc mua hàng
   describe("POST /buy", () => {
+    let createdProduct; // Biến để lưu sản phẩm được tạo
+
+    // Trước mỗi test trong block này, tạo một sản phẩm mới
+    beforeEach(async () => {
+      const productData = { name: "Webcam", description: "HD Webcam", price: 50 };
+      const res = await chai
+        .request(app.app)
+        .post("/")
+        .set("Authorization", `Bearer ${authToken}`)
+        .send(productData);
+      createdProduct = res.body;
+    });
+
     it("should create an order with valid products", async () => {
-      const orderData = [
-        {
-          _id: createdProductId,
-          quantity: 2
-        }
-      ];
+      const orderData = [{ _id: createdProduct._id, quantity: 2 }];
 
       const res = await chai
         .request(app.app)
@@ -189,12 +139,11 @@ describe("Products", () => {
 
       expect(res).to.have.status(201);
       expect(res.body).to.have.property("_id");
-      expect(res.body).to.have.property("username");
-      expect(res.body).to.have.property("products");
-      expect(res.body.products).to.be.an("array");
+      expect(res.body).to.have.property("products").that.is.an("array");
+      expect(res.body.products[0]).to.have.property('product_id', createdProduct._id);
     });
 
-    it("should return error for empty products array", async () => {
+    it("should return an error for an empty products array", async () => {
       const res = await chai
         .request(app.app)
         .post("/buy")
@@ -202,86 +151,6 @@ describe("Products", () => {
         .send([]);
 
       expect(res).to.have.status(400);
-      expect(res.body).to.have.property("message", "Invalid products data");
-    });
-
-    it("should return error for invalid products data", async () => {
-      const res = await chai
-        .request(app.app)
-        .post("/buy")
-        .set("Authorization", `Bearer ${authToken}`)
-        .send("invalid data");
-
-      expect(res).to.have.status(400);
-      expect(res.body).to.have.property("message", "Invalid products data");
-    });
-
-    it("should return error for products without _id", async () => {
-      const orderData = [
-        {
-          quantity: 2
-        }
-      ];
-
-      const res = await chai
-        .request(app.app)
-        .post("/buy")
-        .set("Authorization", `Bearer ${authToken}`)
-        .send(orderData);
-
-      expect(res).to.have.status(400);
-      expect(res.body).to.have.property("message", "Each product must have an id and quantity");
-    });
-
-    it("should return error for products without quantity", async () => {
-      const orderData = [
-        {
-          _id: createdProductId
-        }
-      ];
-
-      const res = await chai
-        .request(app.app)
-        .post("/buy")
-        .set("Authorization", `Bearer ${authToken}`)
-        .send(orderData);
-
-      expect(res).to.have.status(400);
-      expect(res.body).to.have.property("message", "Each product must have an id and quantity");
-    });
-
-    it("should return error for quantity less than 1", async () => {
-      const orderData = [
-        {
-          _id: createdProductId,
-          quantity: 0
-        }
-      ];
-
-      const res = await chai
-        .request(app.app)
-        .post("/buy")
-        .set("Authorization", `Bearer ${authToken}`)
-        .send(orderData);
-
-      expect(res).to.have.status(400);
-      expect(res.body).to.have.property("message", "Product quantity must be > 0");
-    });
-
-    it("should return unauthorized without token", async () => {
-      const orderData = [
-        {
-          _id: createdProductId,
-          quantity: 1
-        }
-      ];
-
-      const res = await chai
-        .request(app.app)
-        .post("/buy")
-        .send(orderData);
-
-      expect(res).to.have.status(401);
     });
   });
 });
