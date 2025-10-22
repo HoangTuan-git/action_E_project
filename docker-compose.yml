@@ -1,0 +1,108 @@
+version: '3.8'
+
+services:
+  # MongoDB for all services
+  mongodb:
+    image: mongo:6.0
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: eproject
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - eproject-network
+
+  # RabbitMQ for message queuing
+  rabbitmq:
+    image: rabbitmq:3.11-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - eproject-network
+
+  # Auth Service
+  auth-service:
+    build: ./auth
+    container_name: auth-service
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - JWT_SECRET=your_jwt_secret_key_here
+      - MONGODB_AUTH_URI=mongodb://mongodb:27017/auth
+    depends_on:
+      - mongodb
+    networks:
+      - eproject-network
+
+  # Product Service
+  product-service:
+    build: ./product
+    container_name: product-service
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - JWT_SECRET=your_jwt_secret_key_here
+      - MONGODB_PRODUCT_URI=mongodb://mongodb:27017/product
+      - RABBITMQ_URI=amqp://admin:admin@rabbitmq:5672
+      - QUEUE_NAME=products
+      - ORDER_SERVICE_URL=http://order-service:3002
+    depends_on:
+      - mongodb
+      - rabbitmq
+    networks:
+      - eproject-network
+
+  # Order Service
+  order-service:
+    build: ./order
+    container_name: order-service
+    ports:
+      - "3002:3002"
+    environment:
+      - PORT=3002
+      - JWT_SECRET=your_jwt_secret_key_here
+      - MONGODB_ORDER_URI=mongodb://mongodb:27017/order
+      - RABBITMQ_URI=amqp://admin:admin@rabbitmq:5672
+      - RABBITMQ_QUEUE=orders
+    depends_on:
+      - mongodb
+      - rabbitmq
+    networks:
+      - eproject-network
+
+  # API Gateway
+  api-gateway:
+    build: ./api-gateway
+    container_name: api-gateway
+    ports:
+      - "3003:3003"
+    environment:
+      - PORT=3003
+      - AUTH_SERVICE_URL=http://auth-service:3000
+      - PRODUCT_SERVICE_URL=http://product-service:3001
+      - ORDER_SERVICE_URL=http://order-service:3002
+    depends_on:
+      - auth-service
+      - product-service
+      - order-service
+    networks:
+      - eproject-network
+
+volumes:
+  mongodb_data:
+  rabbitmq_data:
+
+networks:
+  eproject-network:
+    driver: bridge

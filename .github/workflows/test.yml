@@ -1,0 +1,77 @@
+name: CI
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:latest
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      rabbitmq:
+        image: rabbitmq:3-management
+        ports:
+          - 5672:5672
+          - 15672:15672
+        env:
+          RABBITMQ_DEFAULT_USER: guest
+          RABBITMQ_DEFAULT_PASS: guest
+        options: >-
+          --health-cmd "rabbitmq-diagnostics check_port_connectivity"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3.2.0
+    - name: Create .env file
+      run: |
+        echo "MONGODB_AUTH_URI=mongodb://localhost:27017/auth_test" >> auth/.env
+        echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> auth/.env
+        echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> product/.env
+        echo "MONGODB_PRODUCT_URI=mongodb://localhost:27017/product_test" >> product/.env
+        echo "RABBITMQ_URI=amqp://guest:guest@localhost:5672" >> product/.env
+        echo "RABBITMQ_QUEUE_PRODUCT=product_queue" >> product/.env
+        echo "RABBITMQ_QUEUE_ORDER=order_queue" >> product/.env
+        echo "NODE_ENV=test" >> product/.env
+        echo "LOGIN_TEST_USER=${{ secrets.LOGIN_TEST_USER }}" >> product/.env
+        echo "LOGIN_TEST_PASSWORD=${{ secrets.LOGIN_TEST_PASSWORD }}" >> product/.env
+
+    - name: Install dependencies
+      run: |
+        cd auth
+        npm ci
+        cd ..
+        cd product
+        npm ci
+        cd ..
+        npm ci
+    - name: Run tests for auth
+      run : |
+        cd auth
+        npm test
+    - name: Run tests for product
+      run: |
+        cd auth
+        npm start &
+        sleep 15
+        # Test if auth service is ready
+        timeout 30 bash -c 'until curl -f http://localhost:3000/dashboard 2>/dev/null; do sleep 1; done' || echo "Auth service might not be ready"
+        # Create test user for product tests
+        curl -X POST http://localhost:3000/register \
+          -H "Content-Type: application/json" \
+          -d '{"username":"'${{ secrets.LOGIN_TEST_USER }}'","password":"'${{ secrets.LOGIN_TEST_PASSWORD }}'"}' || echo "User might already exist"
+        # Test login to verify JWT
+        echo "Testing login..."
+        LOGIN_RESPONSE=$(curl -s -X POST http://localhost:3000/login \
+          -H "Content-Type: application/json" \
+          -d '{"username":"'${{ secrets.LOGIN_TEST_USER }}'","password":"'${{ secrets.LOGIN_TEST_PASSWORD }}'"}')
+        echo "Login response: $LOGIN_RESPONSE"
+        cd ../product
+        npm test

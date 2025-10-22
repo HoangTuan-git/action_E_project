@@ -1,0 +1,103 @@
+const amqp = require("amqplib");
+const config = require("../config");
+
+class MessageBroker {
+  constructor() {
+    this.channel = null;
+    this.connection = null;
+  }
+
+  async connect(maxRetries = 5, baseDelay = 2000) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`Connecting to RabbitMQ... (${attempt}/${maxRetries})`);
+        
+        this.connection = await amqp.connect(config.rabbitMQURI);
+        this.channel = await this.connection.createChannel();
+
+        await this.channel.assertQueue(config.queueNameOrder, { durable: true });
+        await this.channel.assertQueue(config.queueNameProduct, { durable: true });
+        
+        console.log("RabbitMQ connected successfully");
+        return;
+        
+      } catch (error) {
+        console.error(`Connection attempt ${attempt} failed:`, error.message);
+        
+        if (attempt === maxRetries) {
+          throw new Error(`Failed to connect after ${maxRetries} attempts`);
+        }
+        
+        // Exponential backoff: 2s, 4s, 8s, 16s
+        const delay = baseDelay * Math.pow(2, attempt - 1);
+        console.log(`Retrying in ${delay / 1000}s...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  async publishMessage(queue, message) {
+    if (!this.channel) {
+      console.error("No RabbitMQ channel available.");
+      return;
+    }
+    try {
+      await this.channel.sendToQueue(
+        queue,
+        Buffer.from(JSON.stringify(message)),
+        { persistent: true }
+      );
+      console.log(`Message sent to queue ${queue}:`, message);
+    } catch (err) {
+      console.error("Failed to publish message:", err);
+    }
+  }
+
+  async consumeOrderMessages(callback) {
+    if (!this.channel) {
+      console.error("No RabbitMQ channel available.");
+      return;
+    }
+    
+    try {
+      console.log(`Starting to consume messages from ${config.queueNameOrder}`);
+      
+      this.channel.consume(config.queueNameOrder, async (message) => {
+        if (message) {
+          try {
+            const orderData = JSON.parse(message.content.toString());
+            console.log("Received order message:", orderData);
+            
+            // Call the callback function to process the order
+            await callback(orderData);
+            
+            // Acknowledge the message
+            this.channel.ack(message);
+          } catch (error) {
+            console.error("Error processing order message:", error);
+            // Reject the message and don't requeue it
+            this.channel.reject(message, false);
+          }
+        }
+      });
+    } catch (err) {
+      console.error("Failed to consume messages:", err);
+    }
+  }
+
+  async disconnect() {
+    try {
+      if (this.channel) {
+        await this.channel.close();
+      }
+      if (this.connection) {
+        await this.connection.close();
+      }
+      console.log("RabbitMQ connection closed");
+    } catch (error) {
+      console.error("Error closing RabbitMQ connection:", error);
+    }
+  }
+}
+
+module.exports = new MessageBroker();
