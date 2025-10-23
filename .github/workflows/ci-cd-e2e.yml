@@ -150,7 +150,7 @@ jobs:
 
       # Start services with pre-built :test images
       - name: Start E2E environment
-        run: docker-compose -f docker-compose.e2e.ci.yml up -d
+        run: docker compose -f docker-compose.e2e.ci.yml up -d
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
 
@@ -159,7 +159,7 @@ jobs:
         run: |
           timeout 90 bash -c '
             while true; do
-              health_status=$(docker-compose -f docker-compose.e2e.ci.yml ps --format json | jq -r ".[] | select(.Service==\"api-gateway\") | .Health")
+              health_status=$(docker compose -f docker-compose.e2e.ci.yml ps --format json | jq -r ".[] | select(.Service==\"api-gateway\") | .Health")
               if [ "$health_status" = "healthy" ]; then
                 echo "✅ API Gateway is healthy!"
                 break
@@ -218,32 +218,3 @@ jobs:
       
       - name: Push :latest tag
         run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/${{ matrix.image }}:latest
-
-  # =====================================================
-  # JOB 5: Deployment Summary
-  # =====================================================
-  summary:
-    needs: [retag-latest]
-    runs-on: ubuntu-latest
-    if: always()
-    
-    steps:
-      - name: Create deployment summary
-        run: |
-          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Branch:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Workflow:** ${{ github.workflow }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### ✅ Jobs Status" >> $GITHUB_STEP_SUMMARY
-          echo "- Unit Tests: ${{ needs.retag-latest.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Build: ${{ needs.retag-latest.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- E2E Tests: ${{ needs.retag-latest.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Re-tag Latest: ${{ needs.retag-latest.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📦 Published Images" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ secrets.DOCKERHUB_USERNAME }}/auth-service:latest\`" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ secrets.DOCKERHUB_USERNAME }}/product-service:latest\`" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ secrets.DOCKERHUB_USERNAME }}/order-service:latest\`" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ secrets.DOCKERHUB_USERNAME }}/api-gateway:latest\`" >> $GITHUB_STEP_SUMMARY
