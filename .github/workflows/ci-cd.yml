@@ -11,16 +11,6 @@ jobs:
   # Job để chạy test cho service "auth"
   test-auth:
     runs-on: ubuntu-latest
-    services:
-      mongodb:
-        image: mongo:latest
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
       # Step 1: Checkout mã nguồn từ repository
       - name: Checkout code
@@ -56,16 +46,6 @@ jobs:
   # Job để chạy test cho service "product"
   test-product:
     runs-on: ubuntu-latest
-    services:
-      mongodb:
-        image: mongo:latest
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
       # Step 1: Checkout mã nguồn
       - name: Checkout code
@@ -96,19 +76,6 @@ jobs:
 
       # Step 5: Chạy test cho service "product"
       # Tối ưu: Không khởi động auth service thật, thay vào đó là mock JWT token trong test
-      - name: Start auth service for product tests
-        run: |
-          cd auth
-          npm install
-          echo "MONGODB_AUTH_URI=mongodb://localhost:27017/auth_test" > .env
-          echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> .env
-          npm start &
-          sleep 5
-          # Create test user
-          curl -X POST http://localhost:3000/register \
-            -H "Content-Type: application/json" \
-            -d '{"username":"'${{ secrets.LOGIN_TEST_USER }}'","password":"'${{ secrets.LOGIN_TEST_PASSWORD }}'"}' || echo "User might already exist"
-            
       - name: Run tests for product
         run: npm test --prefix product
   # Job để build và push Docker images nếu cả 2 job test trên đều thành công
