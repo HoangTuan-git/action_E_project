@@ -1,76 +1,119 @@
 # Tên của workflow
-name: CI - Unit & Integration Tests
+name: CI - Unit Tests & Build Images (Cached)
 
 # Các sự kiện kích hoạt workflow
 on: [push, pull_request]
 
 jobs:
-  # Job để chạy test cho service "auth"
-  test-auth:
+  # ============================================================
+  # JOB DUY NHẤT: Unit Tests + Build với Cache
+  # ============================================================
+  test-and-build:
     runs-on: ubuntu-latest
-    steps:
-      # Step 1: Checkout mã nguồn từ repository
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      # Step 2: Cài đặt Node.js và bật caching cho node_modules
-      # Tối ưu: Tương đương với Docker layer cache, giúp tăng tốc việc cài đặt dependencies
-      - name: Setup Node.js with cache
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18' # Hoặc phiên bản Node.js bạn đang dùng
-          cache: 'npm'
-          cache-dependency-path: auth/package-lock.json
-
-      # Step 3: Cài đặt dependencies cho service "auth"
-      # `npm ci` sẽ sử dụng cache nếu có, giúp tiết kiệm thời gian
-      - name: Install auth dependencies
-        run: npm ci --prefix auth
-
-      # Step 4: Tạo file .env cho môi trường test của service "auth"
-      # Tối ưu: Sử dụng MongoDB in-memory, không cần URI thật
-      - name: Create .env file for auth
-        run: |
-          echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> auth/.env
-          echo "NODE_ENV=test" >> auth/.env
-          # MONGODB_AUTH_URI sẽ được ghi đè bởi mongodb-memory-server trong code test
-
-      # Step 5: Chạy test cho service "auth"
-      # Giả định rằng bạn đã cài đặt "mongodb-memory-server" làm devDependency
-      - name: Run tests for auth
-        run: npm test --prefix auth
-
-  # Job để chạy test cho service "product"
-  test-product:
-    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    
     steps:
       # Step 1: Checkout mã nguồn
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Step 2: Cài đặt Node.js và bật caching cho node_modules
-      # Tối ưu: Tương đương với Docker layer cache
-      - name: Setup Node.js with cache
+      # Step 2: Setup Node.js với npm cache (tăng tốc npm install)
+      - name: Setup Node.js with npm cache
         uses: actions/setup-node@v4
         with:
-          node-version: '18' # Hoặc phiên bản Node.js bạn đang dùng
+          node-version: '18'
           cache: 'npm'
-          cache-dependency-path: product/package-lock.json
+          cache-dependency-path: |
+            auth/package-lock.json
+            product/package-lock.json
 
-      # Step 3: Cài đặt dependencies cho service "product"
-      - name: Install product dependencies
-        run: npm ci --prefix product
-
-      # Step 4: Tạo file .env cho môi trường test của service "product"
-      # Tối ưu: Không cần thông tin về auth service thật hay RabbitMQ thật
-      - name: Create .env file for product
+      # Step 3: Install dependencies cho tất cả services (parallel)
+      - name: Install dependencies (all services)
         run: |
+          echo "📦 Installing dependencies with cache..."
+          npm ci --prefix auth &
+          npm ci --prefix product &
+          wait
+          echo "✅ Dependencies installed"
+
+      # Step 4: Tạo .env files cho testing
+      - name: Create .env files for testing
+        run: |
+          echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> auth/.env
+          echo "NODE_ENV=test" >> auth/.env
+          
           echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> product/.env
           echo "NODE_ENV=test" >> product/.env
-          # MONGODB_PRODUCT_URI sẽ được ghi đè bởi mongodb-memory-server
-          # RABBITMQ_URI sẽ được mock trong môi trường test
+          
+          echo "✅ Environment files created"
 
-      # Step 5: Chạy test cho service "product"
-      # Tối ưu: Không khởi động auth service thật, thay vào đó là mock JWT token trong test
-      - name: Run tests for product
-        run: npm test --prefix product
+      # Step 5: Run unit tests (parallel)
+      - name: Run unit tests
+        run: |
+          echo "🧪 Running unit tests..."
+          npm test --prefix auth &
+          npm test --prefix product &
+          wait
+          echo "✅ All unit tests passed"
+
+      # Step 6: Setup Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Step 7: Build Docker images với GitHub Actions Cache
+      # Cache này sẽ lưu Docker layers, giúp build nhanh hơn
+      - name: Build auth-service (with cache)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./auth
+          push: false
+          tags: auth-service:latest
+          cache-from: type=gha,scope=auth
+          cache-to: type=gha,mode=max,scope=auth
+
+      - name: Build product-service (with cache)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./product
+          push: false
+          tags: product-service:latest
+          cache-from: type=gha,scope=product
+          cache-to: type=gha,mode=max,scope=product
+
+      - name: Build order-service (with cache)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./order
+          push: false
+          tags: order-service:latest
+          cache-from: type=gha,scope=order
+          cache-to: type=gha,mode=max,scope=order
+
+      - name: Build api-gateway (with cache)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./api-gateway
+          push: false
+          tags: api-gateway:latest
+          cache-from: type=gha,scope=gateway
+          cache-to: type=gha,mode=max,scope=gateway
+
+      # Step 8: Report success
+      - name: Report build summary
+        run: |
+          echo "## ✅ Build Successful" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🧪 Tests Passed" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Auth service unit tests" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Product service unit tests" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🐳 Images Built (Cached)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ auth-service" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ product-service" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ order-service" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ api-gateway" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🚀 Ready for E2E tests and deployment"

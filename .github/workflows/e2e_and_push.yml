@@ -1,12 +1,12 @@
 # File: .github/workflows/cd-e2e-and-deploy.yml
 # MỤC ĐÍCH: Chạy các bài test E2E nặng và đẩy image lên Docker Hub.
-# Workflow này CHỈ được kích hoạt KHI workflow "CI - Unit & Integration Tests" chạy xong và THÀNH CÔNG.
+# Workflow này CHỈ được kích hoạt KHI workflow "CI - Unit Tests & Build Images" chạy xong và THÀNH CÔNG.
 
 name: CD - E2E Test & Deploy to Docker Hub
 
 on:
   workflow_run:
-    workflows: ["CI - Unit & Integration Tests"]
+    workflows: ["CI - Unit Tests & Build Images (Cached)"]
     types:
       - completed
     branches: [ main ]
@@ -74,8 +74,9 @@ jobs:
           echo "version_tag=${{ github.ref_name }}-$SHORT_SHA" >> $GITHUB_OUTPUT
           echo "date_tag=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
 
-      # Build images CỤC BỘ (KHÔNG PUSH) - Chỉ build để test
-      - name: Build auth-service locally
+      # Build images CỤC BỘ với CACHE từ job trước (KHÔNG PUSH)
+      # Cache từ job "test-and-build" sẽ được tái sử dụng → Build SIÊU NHANH
+      - name: Build auth-service from cache
         uses: docker/build-push-action@v5
         with:
           context: ./auth
@@ -83,10 +84,10 @@ jobs:
           tags: |
             auth-service:${{ steps.meta.outputs.sha_tag }}
             auth-service:test
-          cache-from: type=gha,scope=auth
+          cache-from: type=gha,scope=auth  # Tải cache từ job trước
           cache-to: type=gha,mode=max,scope=auth
 
-      - name: Build product-service locally
+      - name: Build product-service from cache
         uses: docker/build-push-action@v5
         with:
           context: ./product
@@ -94,10 +95,10 @@ jobs:
           tags: |
             product-service:${{ steps.meta.outputs.sha_tag }}
             product-service:test
-          cache-from: type=gha,scope=product
+          cache-from: type=gha,scope=product  # Tải cache từ job trước
           cache-to: type=gha,mode=max,scope=product
 
-      - name: Build order-service locally
+      - name: Build order-service from cache
         uses: docker/build-push-action@v5
         with:
           context: ./order
@@ -105,10 +106,10 @@ jobs:
           tags: |
             order-service:${{ steps.meta.outputs.sha_tag }}
             order-service:test
-          cache-from: type=gha,scope=order
+          cache-from: type=gha,scope=order  # Tải cache từ job trước
           cache-to: type=gha,mode=max,scope=order
 
-      - name: Build api-gateway locally
+      - name: Build api-gateway from cache
         uses: docker/build-push-action@v5
         with:
           context: ./api-gateway
@@ -116,7 +117,7 @@ jobs:
           tags: |
             api-gateway:${{ steps.meta.outputs.sha_tag }}
             api-gateway:test
-          cache-from: type=gha,scope=gateway
+          cache-from: type=gha,scope=gateway  # Tải cache từ job trước
           cache-to: type=gha,mode=max,scope=gateway
 
       - name: Build e2e-test locally

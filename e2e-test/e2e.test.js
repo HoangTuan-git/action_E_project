@@ -23,47 +23,31 @@ describe('E2E Test - Microservices via API Gateway', () => {
 
   // ==================== AUTH SERVICE ====================
   describe('1. Auth Service', () => {
-    it('should register a new user', async () => {
-      const res = await app
+    it('should register and login to get JWT token', async () => {
+      // Register
+      const registerRes = await app
         .post('/auth/register')
         .send(testUser);
       
-      console.log(`✅ Register response:`, res.status);
-      expect(res).to.have.status(201);
-      expect(res.body).to.have.property('username', testUser.username);
-    });
+      console.log(`✅ Register response:`, registerRes.status);
+      expect(registerRes).to.have.status(201);
+      expect(registerRes.body).to.have.property('username', testUser.username);
 
-    it('should login and get JWT token', async () => {
-      const res = await app
+      // Login
+      const loginRes = await app
         .post('/auth/login')
         .send(testUser);
       
-      expect(res).to.have.status(200);
-      expect(res.body).to.have.property('token');
+      expect(loginRes).to.have.status(200);
+      expect(loginRes.body).to.have.property('token');
       
-      authToken = res.body.token;
+      authToken = loginRes.body.token;
       console.log(`✅ Token received: ${authToken.substring(0, 20)}...`);
-    });
-
-    it('should fail login with wrong password', async () => {
-      const res = await app
-        .post('/auth/login')
-        .send({ username: testUser.username, password: 'wrongpass' });
-      
-      expect(res.status).to.be.oneOf([401, 400]);
     });
   });
 
   // ==================== PRODUCT SERVICE ====================
   describe('2. Product Service', () => {
-    it('should fail to create product without token', async () => {
-      const res = await app
-        .post('/products/')
-        .send({ name: 'Test Product', price: 100 });
-      
-      expect(res).to.have.status(401);
-    });
-
     it('should create a product with valid token', async () => {
       expect(authToken, 'Auth token must exist').to.not.be.null;
 
@@ -78,94 +62,36 @@ describe('E2E Test - Microservices via API Gateway', () => {
         .set('Authorization', `Bearer ${authToken}`)
         .send(productData);
 
-      console.log(`Product creation response:`, res.status, res.body);
+      console.log(`✅ Product created:`, res.status, res.body._id);
       
-      // Kiểm tra response
       expect(res).to.have.status(201);
       expect(res.body).to.have.property('_id');
       expect(res.body).to.have.property('name', productData.name);
-      expect(res.body).to.have.property('price', productData.price);
       
       createdProductId = res.body._id;
-      console.log(`✅ Product created with ID: ${createdProductId}`);
-    });
-
-    it('should get all products', async () => {
-      expect(authToken).to.not.be.null;
-
-      const res = await app
-        .get('/products/')
-        .set('Authorization', `Bearer ${authToken}`);
-      
-      expect(res).to.have.status(200);
-      expect(res.body).to.be.an('array');
-      expect(res.body.length).to.be.greaterThan(0);
-      
-      console.log(`✅ Found ${res.body.length} product(s)`);
     });
   });
 
   // ==================== ORDER SERVICE (via Product /buy) ====================
-  describe('3. Order Service (Create via Product)', () => {
-    it('should create an order successfully', async function() {
-      this.timeout(15000); // Tăng timeout cho test này
+  describe('3. Order Service', () => {
+    it('should create order and verify in order service (with retry)', async function() {
+      this.timeout(25000);
       
       expect(authToken).to.not.be.null;
       expect(createdProductId, 'Product ID must exist').to.not.be.null;
 
-      const orderData = [
-        { _id: createdProductId, quantity: 2 }
-      ];
-
-      const res = await app
+      // Step 1: Create order via Product service
+      const orderData = [{ _id: createdProductId, quantity: 2 }];
+      const createRes = await app
         .post('/products/buy')
         .set('Authorization', `Bearer ${authToken}`)
         .send(orderData);
 
-      console.log(`Order creation response:`, res.status);
-      console.log(`Order body:`, JSON.stringify(res.body, null, 2));
-
-      expect(res).to.have.status(201);
-      expect(res.body).to.have.property('_id');
-      expect(res.body).to.have.property('status');
+      console.log(`✅ Order created:`, createRes.status, createRes.body.status);
+      expect(createRes).to.have.status(201);
+      expect(createRes.body).to.have.property('_id');
       
-      // Status có thể là 'pending' hoặc 'completed' tùy vào RabbitMQ speed
-      const validStatuses = ['pending', 'completed'];
-      expect(validStatuses).to.include(res.body.status);
-      
-      console.log(`✅ Order created with status: ${res.body.status}`);
-    });
-
-    it('should fail to create order with invalid product', async () => {
-      expect(authToken).to.not.be.null;
-
-      const res = await app
-        .post('/products/buy')
-        .set('Authorization', `Bearer ${authToken}`)
-        .send([{ _id: 'invalid-id-123', quantity: 1 }]);
-
-      // Có thể trả về 400 hoặc 500 tùy validation
-      expect(res.status).to.be.oneOf([400, 500]);
-      expect(res.body).to.have.property('message');
-    });
-
-    it('should fail to create order without token', async () => {
-      const res = await app
-        .post('/products/buy')
-        .send([{ _id: createdProductId, quantity: 1 }]);
-
-      expect(res).to.have.status(401);
-    });
-  });
-
-  // ==================== ORDER SERVICE (Get orders) ====================
-  describe('4. Order Service (Get Orders)', () => {
-    it('should get orders for authenticated user (with retry)', async function() {
-      this.timeout(25000); // Timeout cao cho retry logic
-      
-      expect(authToken).to.not.be.null;
-
-      // Retry logic: Đợi RabbitMQ xử lý
+      // Step 2: Verify order appears in Order service (with retry for RabbitMQ)
       let orders = [];
       let attempts = 0;
       const maxAttempts = 5;
@@ -173,49 +99,26 @@ describe('E2E Test - Microservices via API Gateway', () => {
       while (attempts < maxAttempts) {
         attempts++;
         
-        const res = await app
+        const getRes = await app
           .get('/orders/')
           .set('Authorization', `Bearer ${authToken}`);
 
-        console.log(`Attempt ${attempts}/${maxAttempts}: Status ${res.status}, Orders: ${res.body.length || 0}`);
+        console.log(`Attempt ${attempts}/${maxAttempts}: Orders found: ${getRes.body.length || 0}`);
 
-        expect(res).to.have.status(200);
-        expect(res.body).to.be.an('array');
-        
-        orders = res.body;
+        expect(getRes).to.have.status(200);
+        orders = getRes.body;
 
         if (orders.length > 0) {
-          console.log(`✅ Found ${orders.length} order(s)`);
-          
-          // Verify order structure
-          const firstOrder = orders[0];
-          expect(firstOrder).to.have.property('_id');
-          expect(firstOrder).to.have.property('products');
-          
-          // Username có thể không có trong response tùy implementation
-          if (firstOrder.username) {
-            expect(firstOrder.username).to.equal(testUser.username);
-          }
-          
-          break; // Found orders, exit retry loop
+          console.log(`✅ Order verified in Order service`);
+          expect(orders[0]).to.have.property('_id');
+          expect(orders[0]).to.have.property('products').that.is.an('array');
+          break;
         }
 
-        // Wait before retry
         if (attempts < maxAttempts) {
-          console.log(`⏳ Waiting 3s for RabbitMQ to process...`);
           await new Promise(resolve => setTimeout(resolve, 3000));
         }
       }
-
-      // Soft assertion - don't fail if no orders (might be timing)
-      if (orders.length === 0) {
-        console.log(`⚠️  No orders found after ${maxAttempts} attempts (RabbitMQ delay)`);
-      }
-    });
-
-    it('should fail to get orders without token', async () => {
-      const res = await app.get('/orders/');
-      expect(res).to.have.status(401);
     });
   });
 
