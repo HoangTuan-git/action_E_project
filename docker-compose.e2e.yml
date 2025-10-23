@@ -43,6 +43,12 @@ services:
         condition: service_healthy # Chờ DB sẵn sàng
     networks:
       - eproject-network
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3000', (r) => process.exit(r.statusCode ? 0 : 1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   # Product Service
   product-service:
@@ -53,7 +59,8 @@ services:
       - JWT_SECRET=your_jwt_secret_key_here
       - MONGODB_PRODUCT_URI=mongodb://mongodb:27017/product
       - RABBITMQ_URI=amqp://admin:admin@rabbitmq:5672
-      - QUEUE_NAME=products
+      - RABBITMQ_QUEUE_PRODUCT=products
+      - RABBITMQ_QUEUE_ORDER=orders
       - ORDER_SERVICE_URL=http://order-service:3002
     depends_on:
       mongodb:
@@ -62,6 +69,12 @@ services:
         condition: service_healthy
     networks:
       - eproject-network
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3001', (r) => process.exit(r.statusCode ? 0 : 1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   # Order Service
   order-service:
@@ -72,7 +85,8 @@ services:
       - JWT_SECRET=your_jwt_secret_key_here
       - MONGODB_ORDER_URI=mongodb://mongodb:27017/order
       - RABBITMQ_URI=amqp://admin:admin@rabbitmq:5672
-      - RABBITMQ_QUEUE=orders
+      - RABBITMQ_QUEUE_ORDER=orders
+      - RABBITMQ_QUEUE_PRODUCT=products
     depends_on:
       mongodb:
         condition: service_healthy
@@ -80,6 +94,12 @@ services:
         condition: service_healthy
     networks:
       - eproject-network
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3002', (r) => process.exit(r.statusCode ? 0 : 1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   # API Gateway
   api-gateway:
@@ -90,12 +110,23 @@ services:
       - AUTH_SERVICE_URL=http://auth-service:3000
       - PRODUCT_SERVICE_URL=http://product-service:3001
       - ORDER_SERVICE_URL=http://order-service:3002
+    ports:
+      - "3003:3003" # Expose port cho các service khác truy cập
     depends_on:
-      - auth-service
-      - product-service
-      - order-service
+      auth-service:
+        condition: service_healthy
+      product-service:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
     networks:
       - eproject-network
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3003/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
   # E2E Tester Service
   e2e-tester:
@@ -104,7 +135,8 @@ services:
     environment:
       - API_GATEWAY_URL=http://api-gateway:3003
     depends_on:
-      - api-gateway
+      api-gateway:
+        condition: service_healthy # Chờ API Gateway sẵn sàng
     networks:
       - eproject-network
     command: ["npm", "test"]

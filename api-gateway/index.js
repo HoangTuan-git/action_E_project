@@ -8,6 +8,11 @@ const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || "http://localhost:3000"
 const PRODUCT_SERVICE_URL = process.env.PRODUCT_SERVICE_URL || "http://localhost:3001";
 const ORDER_SERVICE_URL = process.env.ORDER_SERVICE_URL || "http://localhost:3002";
 
+// Health check endpoint
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "ok" });
+});
+
 // Route requests to the auth service
 app.use("/auth", (req, res) => {
   req.url = req.url.replace(/^\/auth/, '') || '/';

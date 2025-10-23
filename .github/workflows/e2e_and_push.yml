@@ -13,59 +13,273 @@ on:
 
 jobs:
   # -------------------------------------------------------------
-  # GIAI ĐOẠN 2: CHẠY E2E TESTS
+  # GIAI ĐOẠN 1: CHẠY E2E TESTS
   # -------------------------------------------------------------
   e2e-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 30  # Thêm timeout để tránh treo vô thời hạn
     
-    # === SỬA LỖI 1 & 2: Bỏ 'needs' và thêm 'if' ===
-    # 'needs: unit-tests' ĐÃ BỊ XÓA (vì 2 workflow khác nhau)
-    # Thêm điều kiện 'if' để chỉ chạy KHI workflow trước thành công
+    # Chỉ chạy KHI workflow trước thành công
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     
     steps:
       - name: Checkout the specific commit that passed Unit Tests
-        # === SỬA LỖI 3: Checkout đúng commit ===
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }} # Lấy đúng commit đã chạy unit-test
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      # 1. Build TẤT CẢ các image CỤC BỘ
-      - name: Build all service images
-        run: |
-          docker build -t auth-service:latest ./auth
-          docker build -t product-service:latest ./product
-          docker build -t order-service:latest ./order
-          docker build -t api-gateway:latest ./api-gateway
 
-      # 2. Chạy Docker Compose
-      - name: Run E2E tests
+      # Tạo file .env với tất cả secrets và configs cần thiết
+      - name: Create .env file for E2E tests
         run: |
-          docker compose -f docker-compose.e2e.yml up --abort-on-container-exit
+          cat << EOF > .env.e2e
+          # Security
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          
+          # MongoDB URIs
+          MONGODB_AUTH_URI=mongodb://mongodb:27017/auth
+          MONGODB_PRODUCT_URI=mongodb://mongodb:27017/product
+          MONGODB_ORDER_URI=mongodb://mongodb:27017/order
+          
+          # RabbitMQ
+          RABBITMQ_URI=amqp://admin:admin@rabbitmq:5672
+          RABBITMQ_QUEUE_PRODUCT=products
+          RABBITMQ_QUEUE_ORDER=orders
+          
+          # Service URLs
+          AUTH_SERVICE_URL=http://auth-service:3000
+          PRODUCT_SERVICE_URL=http://product-service:3001
+          ORDER_SERVICE_URL=http://order-service:3002
+          
+          # Ports
+          PORT_AUTH=3000
+          PORT_PRODUCT=3001
+          PORT_ORDER=3002
+          PORT_GATEWAY=3003
+          
+          # API Gateway
+          API_GATEWAY_URL=http://api-gateway:3003
+          EOF
+          
+          echo "✅ Environment file created"
+
+      # Generate version tags
+      - name: Generate image tags
+        id: meta
+        run: |
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          echo "sha_tag=$SHORT_SHA" >> $GITHUB_OUTPUT
+          echo "version_tag=${{ github.ref_name }}-$SHORT_SHA" >> $GITHUB_OUTPUT
+          echo "date_tag=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
+
+      # Build images CỤC BỘ (KHÔNG PUSH) - Chỉ build để test
+      - name: Build auth-service locally
+        uses: docker/build-push-action@v5
+        with:
+          context: ./auth
+          load: true  # Load vào Docker daemon thay vì push
+          tags: |
+            auth-service:${{ steps.meta.outputs.sha_tag }}
+            auth-service:test
+          cache-from: type=gha,scope=auth
+          cache-to: type=gha,mode=max,scope=auth
+
+      - name: Build product-service locally
+        uses: docker/build-push-action@v5
+        with:
+          context: ./product
+          load: true
+          tags: |
+            product-service:${{ steps.meta.outputs.sha_tag }}
+            product-service:test
+          cache-from: type=gha,scope=product
+          cache-to: type=gha,mode=max,scope=product
+
+      - name: Build order-service locally
+        uses: docker/build-push-action@v5
+        with:
+          context: ./order
+          load: true
+          tags: |
+            order-service:${{ steps.meta.outputs.sha_tag }}
+            order-service:test
+          cache-from: type=gha,scope=order
+          cache-to: type=gha,mode=max,scope=order
+
+      - name: Build api-gateway locally
+        uses: docker/build-push-action@v5
+        with:
+          context: ./api-gateway
+          load: true
+          tags: |
+            api-gateway:${{ steps.meta.outputs.sha_tag }}
+            api-gateway:test
+          cache-from: type=gha,scope=gateway
+          cache-to: type=gha,mode=max,scope=gateway
+
+      - name: Build e2e-test locally
+        uses: docker/build-push-action@v5
+        with:
+          context: ./e2e-test
+          load: true
+          tags: e2e-tester:test
+
+      # Cập nhật docker-compose để sử dụng local images
+      - name: Update docker-compose to use local images
+        run: |
+          # Thay thế build directive bằng image local
+          sed -i 's|build: ./auth|image: auth-service:test|g' docker-compose.e2e.yml
+          sed -i 's|build: ./product|image: product-service:test|g' docker-compose.e2e.yml
+          sed -i 's|build: ./order|image: order-service:test|g' docker-compose.e2e.yml
+          sed -i 's|build: ./api-gateway|image: api-gateway:test|g' docker-compose.e2e.yml
+          sed -i 's|build: ./e2e-test|image: e2e-tester:test|g' docker-compose.e2e.yml
+          
+          # Inject JWT_SECRET từ secrets vào docker-compose
+          sed -i 's|JWT_SECRET=your_jwt_secret_key_here|JWT_SECRET=${{ secrets.JWT_SECRET }}|g' docker-compose.e2e.yml
+          
+          echo "✅ Docker Compose updated to use local test images"
+          echo "📋 Verifying configuration..."
+          grep "image:" docker-compose.e2e.yml
+
+      # Chạy E2E tests với local images
+      - name: Run E2E tests
+        id: e2e
+        continue-on-error: true
+        run: |
+          echo "🧪 Starting E2E tests with local images..."
+          docker compose -f docker-compose.e2e.yml up \
+            --abort-on-container-exit \
+            --exit-code-from e2e-tester
+
+      # Capture logs nếu fail
+      - name: Capture service logs on failure
+        if: failure() && steps.e2e.outcome == 'failure'
+        run: |
+          echo "=== Auth Service Logs ===" > e2e-logs.txt
+          docker logs auth-service >> e2e-logs.txt 2>&1 || true
+          echo -e "\n=== Product Service Logs ===" >> e2e-logs.txt
+          docker logs product-service >> e2e-logs.txt 2>&1 || true
+          echo -e "\n=== Order Service Logs ===" >> e2e-logs.txt
+          docker logs order-service >> e2e-logs.txt 2>&1 || true
+          echo -e "\n=== API Gateway Logs ===" >> e2e-logs.txt
+          docker logs api-gateway >> e2e-logs.txt 2>&1 || true
+          echo -e "\n=== E2E Tester Logs ===" >> e2e-logs.txt
+          docker logs e2e-tester >> e2e-logs.txt 2>&1 || true
+
+      - name: Upload logs as artifact
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failure-logs
+          path: e2e-logs.txt
+          retention-days: 7
+
+      # CHỈ KHI E2E TESTS PASS → Save images để push
+      - name: Save Docker images as artifacts
+        if: success() && steps.e2e.outcome == 'success'
+        run: |
+          echo "💾 Saving tested images as artifacts..."
+          mkdir -p /tmp/docker-images
+          
+          docker save auth-service:${{ steps.meta.outputs.sha_tag }} | gzip > /tmp/docker-images/auth-service.tar.gz
+          docker save product-service:${{ steps.meta.outputs.sha_tag }} | gzip > /tmp/docker-images/product-service.tar.gz
+          docker save order-service:${{ steps.meta.outputs.sha_tag }} | gzip > /tmp/docker-images/order-service.tar.gz
+          docker save api-gateway:${{ steps.meta.outputs.sha_tag }} | gzip > /tmp/docker-images/api-gateway.tar.gz
+          
+          echo "✅ Images saved successfully"
+          ls -lh /tmp/docker-images/
+
+      - name: Upload Docker images as artifacts
+        if: success() && steps.e2e.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tested-docker-images
+          path: /tmp/docker-images/*.tar.gz
+          retention-days: 1
+          compression-level: 0  # Already compressed with gzip
+
+      - name: Upload image metadata
+        if: success() && steps.e2e.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-metadata
+          path: |
+            /tmp/image-tags.txt
+          retention-days: 1
+        
+      - name: Save image tags metadata
+        if: success() && steps.e2e.outcome == 'success'
+        run: |
+          cat << EOF > /tmp/image-tags.txt
+          SHA_TAG=${{ steps.meta.outputs.sha_tag }}
+          DATE_TAG=${{ steps.meta.outputs.date_tag }}
+          COMMIT_SHA=${{ github.sha }}
+          BRANCH=${{ github.ref_name }}
+          ACTOR=${{ github.actor }}
+          EOF
 
       - name: Clean up E2E environment
         if: always()
-        run: docker compose -f docker-compose.e2e.yml down -v
+        run: |
+          docker compose -f docker-compose.e2e.yml down -v
+          rm -f .env.e2e
+
+      # Fail job nếu E2E tests failed
+      - name: Fail job if E2E tests failed
+        if: steps.e2e.outcome == 'failure'
+        run: |
+          echo "❌ E2E tests failed - images will NOT be pushed to Docker Hub"
+          exit 1
 
   # -------------------------------------------------------------
-  # GIAI ĐOẠN 3: PUSH LÊN DOCKER HUB
+  # GIAI ĐOẠN 2: PUSH LÊN DOCKER HUB (CHỈ KHI E2E PASS)
   # -------------------------------------------------------------
   push-to-hub:
     runs-on: ubuntu-latest
-    # 'needs: e2e-tests' là ĐÚNG (vì 2 job này CÙNG 1 workflow)
-    needs: e2e-tests 
+    timeout-minutes: 15
+    needs: e2e-tests  # Chỉ chạy khi e2e-tests SUCCESS
 
     steps:
-      - name: Checkout the specific commit that passed E2E Tests
-        # === SỬA LỖI 3 (lặp lại): Checkout đúng commit ===
-        uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }} # Đảm bảo build và push đúng code đã test
+          ref: ${{ github.event.workflow_run.head_sha }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      # Download tested images từ job trước
+      - name: Download tested Docker images
+        uses: actions/download-artifact@v4
+        with:
+          name: tested-docker-images
+          path: /tmp/docker-images
+
+      - name: Download image metadata
+        uses: actions/download-artifact@v4
+        with:
+          name: image-metadata
+          path: /tmp
+
+      - name: Load image metadata
+        id: meta
+        run: |
+          source /tmp/image-tags.txt
+          echo "sha_tag=$SHA_TAG" >> $GITHUB_OUTPUT
+          echo "date_tag=$DATE_TAG" >> $GITHUB_OUTPUT
+          echo "📋 Image metadata loaded:"
+          cat /tmp/image-tags.txt
+
+      # Load images vào Docker daemon
+      - name: Load tested images into Docker
+        run: |
+          echo "📦 Loading tested images from artifacts..."
+          docker load -i /tmp/docker-images/auth-service.tar.gz
+          docker load -i /tmp/docker-images/product-service.tar.gz
+          docker load -i /tmp/docker-images/order-service.tar.gz
+          docker load -i /tmp/docker-images/api-gateway.tar.gz
+          
+          echo "✅ Images loaded successfully"
+          docker images | grep -E "(auth-service|product-service|order-service|api-gateway)"
         
       - name: Login to Docker Hub
         uses: docker/login-action@v3
@@ -73,34 +287,76 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # Build LẠI VÀ PUSH.
-      # Lưu ý: Vì 2 job chạy trên 2 máy ảo khác nhau, Docker sẽ
-      # không dùng được cache từ Giai đoạn 2. Đây là điều bình thường.
-      - name: Build and push api-gateway
-        uses: docker/build-push-action@v5
-        with:
-          context: ./api-gateway
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/api-gateway:latest
-      
-      - name: Build and push auth-service
-        uses: docker/build-push-action@v5
-        with:
-          context: ./auth
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/auth-service:latest
+      # Tag và push images với multiple tags
+      - name: Tag and push auth-service
+        run: |
+          docker tag auth-service:${{ steps.meta.outputs.sha_tag }} \
+                     ${{ secrets.DOCKERHUB_USERNAME }}/auth-service:latest
+          docker tag auth-service:${{ steps.meta.outputs.sha_tag }} \
+                     ${{ secrets.DOCKERHUB_USERNAME }}/auth-service:${{ steps.meta.outputs.sha_tag }}
+          docker tag auth-service:${{ steps.meta.outputs.sha_tag }} \
+                     ${{ secrets.DOCKERHUB_USERNAME }}/auth-service:${{ steps.meta.outputs.date_tag }}
+          
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/auth-service:latest
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/auth-service:${{ steps.meta.outputs.sha_tag }}
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/auth-service:${{ steps.meta.outputs.date_tag }}
 
-      - name: Build and push product-service
-        uses: docker/build-push-action@v5
-        with:
-          context: ./product
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/product-service:latest
+      - name: Tag and push product-service
+        run: |
+          docker tag product-service:${{ steps.meta.outputs.sha_tag }} \
+                     ${{ secrets.DOCKERHUB_USERNAME }}/product-service:latest
+          docker tag product-service:${{ steps.meta.outputs.sha_tag }} \
+                     ${{ secrets.DOCKERHUB_USERNAME }}/product-service:${{ steps.meta.outputs.sha_tag }}
+          docker tag product-service:${{ steps.meta.outputs.sha_tag }} \
+                     ${{ secrets.DOCKERHUB_USERNAME }}/product-service:${{ steps.meta.outputs.date_tag }}
+          
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/product-service:latest
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/product-service:${{ steps.meta.outputs.sha_tag }}
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/product-service:${{ steps.meta.outputs.date_tag }}
 
-      - name: Build and push order-service
-        uses: docker/build-push-action@v5
-        with:
-          context: ./order
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/order-service:latest
+      - name: Tag and push order-service
+        run: |
+          docker tag order-service:${{ steps.meta.outputs.sha_tag }} \
+                     ${{ secrets.DOCKERHUB_USERNAME }}/order-service:latest
+          docker tag order-service:${{ steps.meta.outputs.sha_tag }} \
+                     ${{ secrets.DOCKERHUB_USERNAME }}/order-service:${{ steps.meta.outputs.sha_tag }}
+          docker tag order-service:${{ steps.meta.outputs.sha_tag }} \
+                     ${{ secrets.DOCKERHUB_USERNAME }}/order-service:${{ steps.meta.outputs.date_tag }}
+          
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/order-service:latest
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/order-service:${{ steps.meta.outputs.sha_tag }}
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/order-service:${{ steps.meta.outputs.date_tag }}
+
+      - name: Tag and push api-gateway
+        run: |
+          docker tag api-gateway:${{ steps.meta.outputs.sha_tag }} \
+                     ${{ secrets.DOCKERHUB_USERNAME }}/api-gateway:latest
+          docker tag api-gateway:${{ steps.meta.outputs.sha_tag }} \
+                     ${{ secrets.DOCKERHUB_USERNAME }}/api-gateway:${{ steps.meta.outputs.sha_tag }}
+          docker tag api-gateway:${{ steps.meta.outputs.sha_tag }} \
+                     ${{ secrets.DOCKERHUB_USERNAME }}/api-gateway:${{ steps.meta.outputs.date_tag }}
+          
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/api-gateway:latest
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/api-gateway:${{ steps.meta.outputs.sha_tag }}
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/api-gateway:${{ steps.meta.outputs.date_tag }}
+
+      # Tạo release summary
+      - name: Create deployment summary
+        run: |
+          echo "## 🚀 Deployment Successful" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Author:** @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Published Images" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ secrets.DOCKERHUB_USERNAME }}/auth-service:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ secrets.DOCKERHUB_USERNAME }}/product-service:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ secrets.DOCKERHUB_USERNAME }}/order-service:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ secrets.DOCKERHUB_USERNAME }}/api-gateway:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🏷️ Tags" >> $GITHUB_STEP_SUMMARY
+          echo "- \`latest\` - Production ready" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ steps.meta.outputs.sha_tag }}\` - Tested commit" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ steps.meta.outputs.date_tag }}\` - Build date" >> $GITHUB_STEP_SUMMARY
 
