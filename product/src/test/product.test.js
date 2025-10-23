@@ -76,11 +76,9 @@ describe("Product Service - API Tests", () => {
       useNewUrlParser: true,
       useUnifiedTopology: true,
     });
-    console.log('✅ In-memory MongoDB connected');
 
     // Generate mock JWT token (bypasses Auth service)
     authToken = generateMockToken();
-    console.log('✅ Mock JWT token generated');
 
     // Start app with mocked MessageBroker
     app = new App();
