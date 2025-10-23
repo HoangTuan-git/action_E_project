@@ -12,6 +12,7 @@
   "license": "ISC",
   "dependencies": {
     "amqplib": "^0.10.9",
+    "mongoose": "^7.0.1",
     "axios": "^1.12.2",
     "chai": "^4.3.7",
     "chai-http": "^4.3.0",
@@ -25,7 +26,6 @@
     "chai": "^4.0.0",
     "chai-http": "^4.0.0",
     "mongodb-memory-server": "^10.2.3",
-    "mongoose": "^7.0.1",
     "sinon": "^21.0.0"
   }
 }
