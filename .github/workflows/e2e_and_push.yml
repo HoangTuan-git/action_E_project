@@ -201,25 +201,28 @@ jobs:
           retention-days: 1
           compression-level: 0  # Already compressed with gzip
 
-      - name: Upload image metadata
-        if: success() && steps.e2e.outcome == 'success'
-        uses: actions/upload-artifact@v4
-        with:
-          name: image-metadata
-          path: |
-            /tmp/image-tags.txt
-          retention-days: 1
-        
+      # LƯU METADATA TRƯỚC KHI UPLOAD
       - name: Save image tags metadata
         if: success() && steps.e2e.outcome == 'success'
         run: |
-          cat << EOF > /tmp/image-tags.txt
+          mkdir -p /tmp/metadata
+          cat << EOF > /tmp/metadata/image-tags.txt
           SHA_TAG=${{ steps.meta.outputs.sha_tag }}
           DATE_TAG=${{ steps.meta.outputs.date_tag }}
           COMMIT_SHA=${{ github.sha }}
           BRANCH=${{ github.ref_name }}
           ACTOR=${{ github.actor }}
           EOF
+          echo "✅ Metadata file created:"
+          cat /tmp/metadata/image-tags.txt
+
+      - name: Upload image metadata
+        if: success() && steps.e2e.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-metadata
+          path: /tmp/metadata/image-tags.txt
+          retention-days: 1
 
       - name: Clean up E2E environment
         if: always()
@@ -276,7 +279,7 @@ jobs:
           echo "📦 Loading tested images from artifacts..."
           docker load -i /tmp/docker-images/auth-service.tar.gz
           docker load -i /tmp/docker-images/product-service.tar.gz
-          docker load -i /tmp/docker-images/order-service.tar.gz
+          docker load -i /tmp/doc ker-images/order-service.tar.gz
           docker load -i /tmp/docker-images/api-gateway.tar.gz
           
           echo "✅ Images loaded successfully"

@@ -11,9 +11,10 @@ services:
       - eproject-network
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      interval: 3s        # Giảm từ 10s → 3s
+      timeout: 2s         # Giảm từ 5s → 2s
+      retries: 3          # Giảm từ 5 → 3
+      start_period: 5s    # Giảm từ default → 5s
 
   # RabbitMQ
   rabbitmq:
@@ -26,9 +27,10 @@ services:
       - eproject-network
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      interval: 3s        # Giảm từ 10s → 3s
+      timeout: 2s         # Giảm từ 5s → 2s
+      retries: 3          # Giảm từ 5 → 3
+      start_period: 5s    # Giảm từ default → 5s
 
   # Auth Service
   auth-service:
@@ -45,10 +47,10 @@ services:
       - eproject-network
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3000', (r) => process.exit(r.statusCode ? 0 : 1))\""]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
+      interval: 3s        # Giảm từ 10s → 3s
+      timeout: 2s         # Giảm từ 5s → 2s
+      retries: 3          # Giảm từ 5 → 3
+      start_period: 8s    # Giảm từ 15s → 8s
 
   # Product Service
   product-service:
@@ -71,10 +73,10 @@ services:
       - eproject-network
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3001', (r) => process.exit(r.statusCode ? 0 : 1))\""]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
+      interval: 3s        # Giảm từ 10s → 3s
+      timeout: 2s         # Giảm từ 5s → 2s
+      retries: 3          # Giảm từ 5 → 3
+      start_period: 10s   # Giảm từ 20s → 10s
 
   # Order Service
   order-service:
@@ -96,10 +98,10 @@ services:
       - eproject-network
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3002', (r) => process.exit(r.statusCode ? 0 : 1))\""]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
+      interval: 3s        # Giảm từ 10s → 3s
+      timeout: 2s         # Giảm từ 5s → 2s
+      retries: 3          # Giảm từ 5 → 3
+      start_period: 10s   # Giảm từ 20s → 10s
 
   # API Gateway
   api-gateway:
@@ -123,10 +125,10 @@ services:
       - eproject-network
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3003/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))\""]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
+      interval: 3s        # Giảm từ 10s → 3s
+      timeout: 2s         # Giảm từ 5s → 2s
+      retries: 5          # Giữ nguyên vì critical
+      start_period: 12s   # Giảm từ 20s → 12s
 
   # E2E Tester Service
   e2e-tester:
