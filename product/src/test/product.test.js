@@ -150,14 +150,6 @@ describe("Product Service API (Unit/Integration)", () => {
       // So sánh _id trong response (có thể là ObjectId hoặc string)
       const responseProductId = res.body.products[0]._id;
       expect(responseProductId.toString()).to.equal(createdProduct._id);
-
-      // 2. Kiểm tra xem mock MessageBroker.publishMessage có được gọi không
-      console.log('publishStub.callCount:', publishStub.callCount);
-      console.log('publishStub.called:', publishStub.called);
-      if (publishStub.firstCall) {
-        console.log('publishStub.firstCall.args:', publishStub.firstCall.args);
-      }
-      
       expect(publishStub.calledOnce).to.be.true;
 
       // 3. Lấy nội dung đã được gửi
@@ -166,10 +158,6 @@ describe("Product Service API (Unit/Integration)", () => {
       const queueName = callArgs[0];
       const message = callArgs[1];
       
-      // Debug: In ra để xem structure
-      console.log('createdProduct._id:', createdProduct._id, typeof createdProduct._id);
-      console.log('message.products[0]._id:', message.products[0]._id, typeof message.products[0]._id);
-
       // 4. Kiểm tra TÊN QUEUE và NỘI DUNG MESSAGE
       expect(queueName).to.equal('orders');
       
