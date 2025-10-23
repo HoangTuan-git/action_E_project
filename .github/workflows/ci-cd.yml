@@ -55,13 +55,6 @@ jobs:
           MONGOMS_DOWNLOAD_DIR: /home/runner/.cache/mongodb-binaries
           MONGOMS_VERSION: 7.0.14
 
-      - name: Verify MongoDB binary downloaded
-        if: always()
-        run: |
-          echo "=== Checking MongoDB binaries ==="
-          ls -lah /home/runner/.cache/mongodb-binaries || echo "No binaries found"
-          du -sh /home/runner/.cache/mongodb-binaries/* || true
-
   build-and-push:
       needs: [unit-tests]
       runs-on: ubuntu-latest
