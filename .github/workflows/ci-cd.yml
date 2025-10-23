@@ -19,14 +19,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cache global node modules
-        uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-npm-
-
       - uses: actions/setup-node@v4
         with:
           node-version: '18'
@@ -35,20 +27,19 @@ jobs:
       
       - run: npm ci --prefix ${{ matrix.service }}
 
-      # Cache MongoMemoryServer binaries
+      # Cache MongoMemoryServer binaries (shared across all services)
       - name: Cache MongoMemoryServer binaries
         uses: actions/cache@v4
         with:
           path: ~/.cache/mongodb-binaries
-          key: mongodb-binary-${{ runner.os }}-${{ matrix.service }}
+          key: mongodb-binary-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
-            mongodb-binary-${{ matrix.service }}
+            mongodb-binary-${{ runner.os }}-
 
       - run: npm test --prefix ${{ matrix.service }}
         env:
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           NODE_ENV: test
-          MONGOMS_DOWNLOAD_DIR: /tmp/mongodb-binaries
 
   build-and-push:
       needs: [unit-tests]
@@ -88,6 +79,5 @@ jobs:
           push: true
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/${{ matrix.image }}:latest
-          cache-from: |
-            type=gha,scope=${{ matrix.service }}
+          cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
