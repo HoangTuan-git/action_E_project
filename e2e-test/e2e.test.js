@@ -32,7 +32,7 @@ describe('Full E2E Test via API Gateway', () => {
   // Giai đoạn 1: Test Auth Service (qua Gateway)
   describe('Phase 1: Auth Service (via Gateway)', () => {
     it('should register a new user', async () => {
-      const res = await app.post('/register') // Giả sử route gateway là /register
+      const res = await app.post('auth/register') // Giả sử route gateway là /register
         .send(testUser);
       
       expect(res).to.have.status(201);
@@ -40,7 +40,7 @@ describe('Full E2E Test via API Gateway', () => {
     });
 
     it('should log in and get a real JWT token', async () => {
-      const res = await app.post('/login') // Giả sử route gateway là /login
+      const res = await app.post('auth/login') // Giả sử route gateway là /login
         .send(testUser);
       
       expect(res).to.have.status(200);
@@ -51,10 +51,10 @@ describe('Full E2E Test via API Gateway', () => {
     });
   });
 
-  // Giai đoạn 2: Test Product Service (qua Gateway, dùng token thật)
+  // Giai đoạn 2.1: Test Product Service (qua Gateway, dùng token thật)
   describe('Phase 2: Product Service (via Gateway)', () => {
     it('should fail to create a product without a token', async () => {
-      const res = await app.post('/products') // Giả sử route gateway là /products
+      const res = await app.post('products/') 
         .send(testProduct);
       
       expect(res).to.have.status(401); // 401 Unauthorized
@@ -63,7 +63,7 @@ describe('Full E2E Test via API Gateway', () => {
     it('should create a new product with a valid token', async () => {
       expect(authToken, 'Auth token must exist to run this test').to.not.be.null;
 
-      const res = await app.post('/products')
+      const res = await app.post('products/')
         .set('Authorization', `Bearer ${authToken}`) // Gửi token thật
         .send(testProduct);
       
@@ -75,7 +75,7 @@ describe('Full E2E Test via API Gateway', () => {
     });
 
     it('should get all products with a valid token', async () => {
-      const res = await app.get('/products')
+      const res = await app.get('products/')
         .set('Authorization', `Bearer ${authToken}`);
         
       expect(res).to.have.status(200);
@@ -84,14 +84,14 @@ describe('Full E2E Test via API Gateway', () => {
     });
   });
 
-  // Giai đoạn 3: Test Order Service (qua Gateway, dùng token thật)
-  describe('Phase 3: Order Service (via Gateway)', () => {
+  // Giai đoạn 2.2: buy product qua Gateway
+  describe('Phase 2.2: Buy Product (via Gateway)', () => {
     it('should fail to create an order with invalid product ID', async () => {
       expect(authToken, 'Auth token must exist').to.not.be.null;
 
       const orderData = [{ _id: 'invalid-id', quantity: 1 }];
       
-      const res = await app.post('/buy') // Giả sử route gateway là /buy
+      const res = await app.post('products/buy') // Giả sử route gateway là /buy
         .set('Authorization', `Bearer ${authToken}`)
         .send(orderData);
       
@@ -105,7 +105,7 @@ describe('Full E2E Test via API Gateway', () => {
 
       const orderData = [{ _id: createdProductId, quantity: 2 }];
 
-      const res = await app.post('/buy')
+      const res = await app.post('products/buy')
         .set('Authorization', `Bearer ${authToken}`)
         .send(orderData);
 
@@ -115,17 +115,23 @@ describe('Full E2E Test via API Gateway', () => {
       
       createdOrderId = res.body._id; // Lưu ID đơn hàng
     });
-
-    it('should get the user\'s orders', async () => {
-      const res = await app.get('/orders') // Giả sử route gateway là /orders
+  });
+  // Giai đoạn 3: Test Order Service (qua Gateway, dùng token thật)
+  describe('Phase 3: Order Service (via Gateway)', () => {
+    it('should get all orders for the user with a valid token', async () => {
+      expect(authToken, 'Auth token must exist').to.not.be.null;
+      const res = await app.get('orders/') // Giả sử route gateway là /orders
         .set('Authorization', `Bearer ${authToken}`);
-      
+
       expect(res).to.have.status(200);
       expect(res.body).to.be.an('array');
       // Kiểm tra xem đơn hàng vừa tạo có nằm trong danh sách không
       const found = res.body.some(order => order._id === createdOrderId);
       expect(found).to.be.true;
     });
+    it('should not get orders without a token', async () => {
+      const res = await app.get('orders/'); // Giả sử route gateway là /orders
+      expect(res).to.have.status(401); // 401 Unauthorized
+    });
   });
 });
-
