@@ -30,7 +30,7 @@ class ProductsService {
 
   async getProductById(productId) {
     const product = await this.productsRepository.findById(productId);
-    if (!product) {
+    if (!product || product === null) {
       return { success: false, message: "Product not found" };
     }
     return { success: true, product };

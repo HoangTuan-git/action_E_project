@@ -6,7 +6,7 @@ class ProductController {
     this.createProduct = this.createProduct.bind(this);
     this.getProducts = this.getProducts.bind(this);
     this.createOrder = this.createOrder.bind(this);
-    this.getOrderStatus = this.getProductById.bind(this);
+    this.getProductById = this.getProductById.bind(this);
   }
   async createProduct(req, res) {
     try {
