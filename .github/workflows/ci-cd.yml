@@ -47,7 +47,14 @@ jobs:
           key: mongodb-binary-${{ runner.os }}-7.0.14
           restore-keys: |
             mongodb-binary-${{ runner.os }}-
+            mongodb-binary-${{ runner.os }}-7.0.14
 
+      - name: Debug mongodb-memory-server cache path
+        run: |
+          node -e "console.log(require('os').homedir())"
+          ls -R ~/.cache || true
+          ls -R ~/mongodb-binaries || true
+          
       - run: npm test --prefix ${{ matrix.service }}
         env:
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
