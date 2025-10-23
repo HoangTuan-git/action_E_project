@@ -35,7 +35,17 @@ jobs:
           npm ci --prefix product &
           wait
           echo "✅ Dependencies installed"
-
+        
+        # create env files for services
+      - name: Create .env files for testing
+        run: |
+          echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> auth/.env
+          echo "NODE_ENV=test" >> auth/.env
+          
+          echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> product/.env
+          echo "NODE_ENV=test" >> product/.env
+          
+          echo "✅ Environment files created"
       # 4. Run unit tests (parallel)
       - name: Run unit tests
         run: |
@@ -44,7 +54,6 @@ jobs:
           npm test --prefix product &
           wait
           echo "✅ All unit tests passed"
-
       # 5. Setup Docker Buildx
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
