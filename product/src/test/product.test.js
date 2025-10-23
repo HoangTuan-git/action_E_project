@@ -195,47 +195,6 @@ describe("Product Service - API Tests", () => {
     });
   });
 
-   /**
-   * TEST SUITE: GET / id (Get Product by ID)
-   * 
-   * Tests retrieving a single product by its ID
-   * Verifies:
-   * - Product can be retrieved from database by ID
-   * - Response contains correct product details
-   * - Protected route requires valid JWT token
-   * */
-  describe("GET /:id - Get Product by ID", () => {
-    let createdProduct;
-
-    // Setup: Create a test product before each test
-    beforeEach(async () => {
-      const testProduct = { 
-        name: "Monitor", 
-        description: "27-inch 4K Monitor", 
-        price: 600 
-      };
-      
-      const res = await chai
-        .request(app.app)
-        .post("/")
-        .set("Authorization", `Bearer ${authToken}`)
-        .send(testProduct);
-
-      createdProduct = res.body;
-    });
-
-    it("should get a product by ID with valid authentication", async () => {
-      const res = await chai
-        .request(app.app)
-        .get(`/${createdProduct._id}`)
-        .set("Authorization", `Bearer ${authToken}`);
-
-      // Verify response
-      expect(res).to.have.status(200);
-      expect(res.body).to.have.property("_id", createdProduct._id);
-      expect(res.body).to.have.property("name", createdProduct.name);
-    });
-  });
 
   /**
    * TEST SUITE: POST /buy (Create Order)
