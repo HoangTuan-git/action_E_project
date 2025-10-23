@@ -99,7 +99,7 @@ services:
 
   # E2E Tester Service
   e2e-tester:
-    build: ./e2e-tests # <-- Dùng 'build'
+    build: ./e2e-test # <-- Dùng 'build'
     container_name: e2e-tester
     environment:
       - API_GATEWAY_URL=http://api-gateway:3003
