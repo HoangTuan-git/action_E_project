@@ -1,55 +1,53 @@
 version: '3.8'
 
 services:
-  # MongoDB for all services
+  # MongoDB
   mongodb:
-    image: mongo:6.0
+    image: mongo:6.0 # Dùng image có sẵn cho DB
     container_name: mongodb
-    ports:
-      - "27017:27017"
     environment:
       MONGO_INITDB_DATABASE: eproject
-    volumes:
-      - mongodb_data:/data/db
     networks:
       - eproject-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # RabbitMQ for message queuing
+  # RabbitMQ
   rabbitmq:
-    image: rabbitmq:3.11-management
+    image: rabbitmq:3.11-management # Dùng image có sẵn cho broker
     container_name: rabbitmq
-    ports:
-      - "5672:5672"
-      - "15672:15672"
     environment:
       RABBITMQ_DEFAULT_USER: admin
       RABBITMQ_DEFAULT_PASS: admin
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
     networks:
       - eproject-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # Auth Service
   auth-service:
-    build: ./auth
+    build: ./auth # <-- Dùng 'build'
     container_name: auth-service
-    ports:
-      - "3000:3000"
     environment:
       - PORT=3000
       - JWT_SECRET=your_jwt_secret_key_here
       - MONGODB_AUTH_URI=mongodb://mongodb:27017/auth
     depends_on:
-      - mongodb
+      mongodb:
+        condition: service_healthy # Chờ DB sẵn sàng
     networks:
       - eproject-network
 
   # Product Service
   product-service:
-    build: ./product
+    build: ./product # <-- Dùng 'build'
     container_name: product-service
-    ports:
-      - "3001:3001"
     environment:
       - PORT=3001
       - JWT_SECRET=your_jwt_secret_key_here
@@ -58,17 +56,17 @@ services:
       - QUEUE_NAME=products
       - ORDER_SERVICE_URL=http://order-service:3002
     depends_on:
-      - mongodb
-      - rabbitmq
+      mongodb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     networks:
       - eproject-network
 
   # Order Service
   order-service:
-    build: ./order
+    build: ./order # <-- Dùng 'build'
     container_name: order-service
-    ports:
-      - "3002:3002"
     environment:
       - PORT=3002
       - JWT_SECRET=your_jwt_secret_key_here
@@ -76,17 +74,17 @@ services:
       - RABBITMQ_URI=amqp://admin:admin@rabbitmq:5672
       - RABBITMQ_QUEUE=orders
     depends_on:
-      - mongodb
-      - rabbitmq
+      mongodb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     networks:
       - eproject-network
 
   # API Gateway
   api-gateway:
-    build: ./api-gateway
+    build: ./api-gateway # <-- Dùng 'build'
     container_name: api-gateway
-    ports:
-      - "3003:3003"
     environment:
       - PORT=3003
       - AUTH_SERVICE_URL=http://auth-service:3000
@@ -98,10 +96,23 @@ services:
       - order-service
     networks:
       - eproject-network
-    
-volumes:
-  mongodb_data:
-  rabbitmq_data:
+
+  # E2E Tester Service
+  e2e-tester:
+    build: ./e2e-tests # <-- Dùng 'build'
+    container_name: e2e-tester
+    environment:
+      - API_GATEWAY_URL=http://api-gateway:3003
+    depends_on:
+      - api-gateway
+    networks:
+      - eproject-network
+    command: ["npm", "test"]
+
+# KHÔNG DÙNG volumes
+# volumes:
+#   mongodb_data:
+#   rabbitmq_data:
 
 networks:
   eproject-network:

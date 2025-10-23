@@ -19,7 +19,6 @@ Content-Type: application/json
 {
   "username": "testuser",
   "password": "password123",
-  "email": "testuser@example.com"
 }
 ```
 
@@ -62,20 +61,6 @@ Authorization: Bearer <your_jwt_token>
 Authorization: Bearer <your_jwt_token>
 ```
 
-### 1.5 Delete User
-**Method**: DELETE  
-**URL**: `http://localhost:3003/auth/deluser`  
-**Headers**:
-```
-Content-Type: application/json
-Authorization: Bearer <your_jwt_token>
-```
-**Body** (JSON):
-```json
-{
-  "username": "testuser"
-}
-```
 
 ## 2. Product Service APIs
 

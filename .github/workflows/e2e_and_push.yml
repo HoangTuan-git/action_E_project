@@ -1,0 +1,106 @@
+# File: .github/workflows/cd-e2e-and-deploy.yml
+# MỤC ĐÍCH: Chạy các bài test E2E nặng và đẩy image lên Docker Hub.
+# Workflow này CHỈ được kích hoạt KHI workflow "CI - Unit & Integration Tests" chạy xong và THÀNH CÔNG.
+
+name: CD - E2E Test & Deploy to Docker Hub
+
+on:
+  workflow_run:
+    workflows: ["CI - Unit & Integration Tests"]
+    types:
+      - completed
+    branches: [ main ]
+
+jobs:
+  # -------------------------------------------------------------
+  # GIAI ĐOẠN 2: CHẠY E2E TESTS
+  # -------------------------------------------------------------
+  e2e-tests:
+    runs-on: ubuntu-latest
+    
+    # === SỬA LỖI 1 & 2: Bỏ 'needs' và thêm 'if' ===
+    # 'needs: unit-tests' ĐÃ BỊ XÓA (vì 2 workflow khác nhau)
+    # Thêm điều kiện 'if' để chỉ chạy KHI workflow trước thành công
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    
+    steps:
+      - name: Checkout the specific commit that passed Unit Tests
+        # === SỬA LỖI 3: Checkout đúng commit ===
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }} # Lấy đúng commit đã chạy unit-test
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      # 1. Build TẤT CẢ các image CỤC BỘ
+      - name: Build all service images
+        run: |
+          docker build -t auth-service:latest ./auth
+          docker build -t product-service:latest ./product
+          docker build -t order-service:latest ./order
+          docker build -t api-gateway:latest ./api-gateway
+
+      # 2. Chạy Docker Compose
+      - name: Run E2E tests
+        run: |
+          docker compose -f docker-compose.e2e.yml up --abort-on-container-exit
+
+      - name: Clean up E2E environment
+        if: always()
+        run: docker compose -f docker-compose.e2e.yml down -v
+
+  # -------------------------------------------------------------
+  # GIAI ĐOẠN 3: PUSH LÊN DOCKER HUB
+  # -------------------------------------------------------------
+  push-to-hub:
+    runs-on: ubuntu-latest
+    # 'needs: e2e-tests' là ĐÚNG (vì 2 job này CÙNG 1 workflow)
+    needs: e2e-tests 
+
+    steps:
+      - name: Checkout the specific commit that passed E2E Tests
+        # === SỬA LỖI 3 (lặp lại): Checkout đúng commit ===
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }} # Đảm bảo build và push đúng code đã test
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Build LẠI VÀ PUSH.
+      # Lưu ý: Vì 2 job chạy trên 2 máy ảo khác nhau, Docker sẽ
+      # không dùng được cache từ Giai đoạn 2. Đây là điều bình thường.
+      - name: Build and push api-gateway
+        uses: docker/build-push-action@v5
+        with:
+          context: ./api-gateway
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/api-gateway:latest
+      
+      - name: Build and push auth-service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./auth
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/auth-service:latest
+
+      - name: Build and push product-service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./product
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/product-service:latest
+
+      - name: Build and push order-service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./order
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/order-service:latest
+

@@ -1,5 +1,5 @@
 # Tên của workflow
-name: Optimized CI
+name: CI - Unit & Integration Tests
 
 # Các sự kiện kích hoạt workflow
 on: [push, pull_request]

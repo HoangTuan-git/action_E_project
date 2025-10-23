@@ -1,0 +1,14 @@
+{
+  "name": "e2e-tester",
+  "version": "1.0.0",
+  "description": "Runs E2E tests against the live microservices",
+  "main": "index.js",
+  "scripts": {
+    "test": "mocha test/e2e.test.js --timeout 15000 --exit"
+  },
+  "dependencies": {
+    "chai": "^4.0.0",
+    "chai-http": "^4.0.0",
+    "mocha": "^10.0.0"
+  }
+}
