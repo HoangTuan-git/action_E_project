@@ -39,7 +39,7 @@ jobs:
       - name: Cache MongoMemoryServer binaries
         uses: actions/cache@v4
         with:
-          path: /tmp/mongodb-binaries
+          path: ~/.cache/mongodb-binaries
           key: mongodb-binary-${{ runner.os }}-${{ matrix.service }}
           restore-keys: |
             mongodb-binary-${{ matrix.service }}
@@ -91,22 +91,3 @@ jobs:
           cache-from: |
             type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
-
-      # Summary
-      - name: Create deployment summary
-        if: matrix.service == 'api-gateway'
-        run: |
-          echo "## 🚀 Deployment Successful" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Branch:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Time:** $(date)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📦 Published Images" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ secrets.DOCKERHUB_USERNAME }}/auth-service:latest\`" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ secrets.DOCKERHUB_USERNAME }}/product-service:latest\`" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ secrets.DOCKERHUB_USERNAME }}/order-service:latest\`" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ secrets.DOCKERHUB_USERNAME }}/api-gateway:latest\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🏷️ Tags" >> $GITHUB_STEP_SUMMARY
-          echo "- \`latest\`, \`${{ steps.meta.outputs.sha_tag }}\`, \`${{ steps.meta.outputs.date_tag }}\`" >> $GITHUB_STEP_SUMMARY
