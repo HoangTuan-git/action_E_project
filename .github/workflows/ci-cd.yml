@@ -39,28 +39,28 @@ jobs:
 
       # Cache MongoMemoryServer binaries (shared across all services)
       - name: Cache MongoMemoryServer binaries
+        id: cache-mongodb
         uses: actions/cache@v4
         with:
-          path: |
-            ~/.cache/mongodb-binaries
-            ~/mongodb-binaries
+          path: /home/runner/.cache/mongodb-binaries
           key: mongodb-binary-${{ runner.os }}-7.0.14
           restore-keys: |
             mongodb-binary-${{ runner.os }}-
-            mongodb-binary-${{ runner.os }}-7.0.14
 
-      - name: Debug mongodb-memory-server cache path
-        run: |
-          node -e "console.log(require('os').homedir())"
-          ls -R ~/.cache || true
-          ls -R ~/mongodb-binaries || true
-          
-      - run: npm test --prefix ${{ matrix.service }}
+      - name: Run tests
+        run: npm test --prefix ${{ matrix.service }}
         env:
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           NODE_ENV: test
-          MONGOMS_DOWNLOAD_DIR: ~/.cache/mongodb-binaries
+          MONGOMS_DOWNLOAD_DIR: /home/runner/.cache/mongodb-binaries
           MONGOMS_VERSION: 7.0.14
+
+      - name: Verify MongoDB binary downloaded
+        if: always()
+        run: |
+          echo "=== Checking MongoDB binaries ==="
+          ls -lah /home/runner/.cache/mongodb-binaries || echo "No binaries found"
+          du -sh /home/runner/.cache/mongodb-binaries/* || true
 
   build-and-push:
       needs: [unit-tests]
