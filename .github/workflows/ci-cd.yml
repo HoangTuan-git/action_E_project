@@ -8,99 +8,60 @@ on:
     branches: [ main ]
 
 jobs:
-  # Job để chạy test cho service "auth"
-  test-auth:
-    runs-on: ubuntu-latest
-    steps:
-      # Step 1: Checkout mã nguồn từ repository
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      # Step 2: Cài đặt Node.js và bật caching cho node_modules
-      # Tối ưu: Tương đương với Docker layer cache, giúp tăng tốc việc cài đặt dependencies
-      - name: Setup Node.js with cache
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18' # Hoặc phiên bản Node.js bạn đang dùng
-          cache: 'npm'
-          cache-dependency-path: auth/package-lock.json
-
-      # Step 3: Cài đặt dependencies cho service "auth"
-      # `npm ci` sẽ sử dụng cache nếu có, giúp tiết kiệm thời gian
-      - name: Install auth dependencies
-        run: npm install --prefix auth
-
-      # Step 4: Tạo file .env cho môi trường test của service "auth"
-      # Tối ưu: Sử dụng MongoDB in-memory, không cần URI thật
-      - name: Create .env file for auth
-        run: |
-          echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> auth/.env
-          echo "NODE_ENV=test" >> auth/.env
-          echo "MONGODB_AUTH_URI=mongodb://localhost:27017/auth_test" >> auth/.env
-
-      # Step 5: Chạy test cho service "auth"
-      # Giả định rằng bạn đã cài đặt "mongodb-memory-server" làm devDependency
-      - name: Run tests for auth
-        run: npm test --prefix auth
-
-  # Job để chạy test cho service "product"
-  test-product:
-    runs-on: ubuntu-latest
-    steps:
-      # Step 1: Checkout mã nguồn
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      # Step 2: Cài đặt Node.js và bật caching cho node_modules
-      # Tối ưu: Tương đương với Docker layer cache
-      - name: Setup Node.js with cache
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18' # Hoặc phiên bản Node.js bạn đang dùng
-          cache: 'npm'
-          cache-dependency-path: product/package-lock.json
-
-      # Step 3: Cài đặt dependencies cho service "product"
-      - name: Install product dependencies
-        run: npm install --prefix product
-
-      # Step 4: Tạo file .env cho môi trường test của service "product"
-      # Tối ưu: Không cần thông tin về auth service thật hay RabbitMQ thật
-      - name: Create .env file for product
-        run: |
-          echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> product/.env
-          echo "NODE_ENV=test" >> product/.env
-          echo "MONGODB_PRODUCT_URI=mongodb://localhost:27017/product_test" >> product/.env
-          echo "LOGIN_TEST_USER=${{ secrets.LOGIN_TEST_USER }}" >> product/.env
-          echo "LOGIN_TEST_PASSWORD=${{ secrets.LOGIN_TEST_PASSWORD }}" >> product/.env
-
-      # Step 5: Chạy test cho service "product"
-      # Tối ưu: Không khởi động auth service thật, thay vào đó là mock JWT token trong test
-      - name: Run tests for product
-        run: npm test --prefix product
-  # Job để build và push Docker images nếu cả 2 job test trên đều thành công
-  build-and-push:
-    needs: [test-auth, test-product]
+  test-build-and-push:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     
     steps:
-      # 1. Checkout code (BẮT BUỘC để build)
+      # 1. Checkout code
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. Setup Docker Buildx (BẮT BUỘC cho GitHub Actions cache)
+      # 2. Setup Node.js with cache
+      - name: Setup Node.js with npm cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: |
+            auth/package-lock.json
+            product/package-lock.json
+
+      # 3. Install dependencies (parallel)
+      - name: Install dependencies
+        run: |
+          echo "📦 Installing dependencies..."
+          npm ci --prefix auth &
+          npm ci --prefix product &
+          wait
+          echo "✅ Dependencies installed"
+
+      # 4. Run unit tests (parallel)
+      - name: Run auth unit tests
+        run: |
+          echo "🧪 Running unit tests..."
+          npm test --prefix auth &
+          wait
+
+      - name: Run product unit tests
+        run: |
+          echo "🧪 Running unit tests..."
+          npm test --prefix product &
+          wait
+          echo "✅ All unit tests passed"
+
+      # 5. Setup Docker Buildx
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 3. Login to Docker Hub
+      # 6. Login to Docker Hub
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # 4. Generate tags
+      # 7. Generate tags
       - name: Generate tags
         id: meta
         run: |
@@ -108,7 +69,7 @@ jobs:
           echo "sha_tag=$SHORT_SHA" >> $GITHUB_OUTPUT
           echo "date_tag=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
 
-      # 5. Build and Push images (parallel với cache)
+      # 8. Build and Push images (parallel với cache)
       - name: Build and push auth-service
         uses: docker/build-push-action@v5
         with:
@@ -157,7 +118,7 @@ jobs:
           cache-from: type=gha,scope=gateway
           cache-to: type=gha,mode=max,scope=gateway
 
-      # 6. Summary
+      # 9. Summary
       - name: Create deployment summary
         run: |
           echo "## 🚀 Deployment Successful" >> $GITHUB_STEP_SUMMARY
