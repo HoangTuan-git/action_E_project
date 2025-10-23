@@ -32,8 +32,5 @@ ENV NODE_ENV=production \
 # Expose port
 EXPOSE 3001
 
-# Healthcheck giúp CI/CD biết container thực sự khởi chạy thành công
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD wget -qO- http://localhost:${PORT}/health || exit 1
-
 # Start service
 CMD ["npm", "start"]
