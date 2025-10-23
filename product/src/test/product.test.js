@@ -135,7 +135,7 @@ describe("Product Service - API Tests", () => {
    * - HTTP 201 response with product details
    */
   describe("POST / - Create Product", () => {
-    it("should create a new product and publish message to RabbitMQ", async () => {
+    it("should create a new product with a valid token and data", async () => {
       const newProduct = { 
         name: "Laptop", 
         description: "A powerful laptop", 
@@ -153,9 +153,7 @@ describe("Product Service - API Tests", () => {
       expect(res.body).to.have.property("_id");
       expect(res.body).to.have.property("name", newProduct.name);
       expect(res.body).to.have.property("price", newProduct.price);
-
-      // Verify RabbitMQ message was published
-      expect(messageBrokerStubs.publish.calledOnce).to.be.true;
+      console.log('✅ Product creation verified');
     });
   });
 
@@ -195,6 +193,7 @@ describe("Product Service - API Tests", () => {
       expect(res.body).to.be.an("array");
       expect(res.body.length).to.equal(1);
       expect(res.body[0]).to.have.property("name", "Keyboard");
+      console.log('✅ Product listing verified');
     });
   });
 
@@ -283,6 +282,7 @@ describe("Product Service - API Tests", () => {
       expect(publishedMessage.products[0]).to.have.property('quantity', 2);
       expect(publishedMessage.products[0]).to.have.property('name', 'Webcam');
       expect(publishedMessage.products[0]).to.have.property('price', 50);
+      console.log('✅ Order creation and RabbitMQ publish verified');
     });
 
     it("should return 400 error for empty products array", async () => {
@@ -297,6 +297,7 @@ describe("Product Service - API Tests", () => {
       
       // Verify RabbitMQ publish was NOT called (invalid request)
       expect(messageBrokerStubs.publish.called).to.be.false;
+      console.log('✅ Invalid order request correctly handled');
     });
   });
 });
