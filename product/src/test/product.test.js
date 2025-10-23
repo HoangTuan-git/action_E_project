@@ -13,8 +13,7 @@ const { MongoMemoryServer } = require('mongodb-memory-server');
 const sinon = require('sinon');
 const App = require("../app"); // Đảm bảo đường dẫn này đúng
 const { generateMockToken } = require('./authHelper');
-// Bỏ 'dotenv' vì chúng ta đang set env thủ công ở trên
-// require("dotenv").config(); 
+
 
 chai.use(chaiHttp);
 const expect = chai.expect;
@@ -39,10 +38,6 @@ describe("Product Service API (Unit/Integration)", () => {
     // 2. Tạo mock token
     authToken = generateMockToken();
     console.log('Generated mock auth token for tests.');
-
-    // 3. Khởi tạo app
-    app = new App();
-
     // 4. MOCK RABBITMQ (Rất quan trọng)
     // Tạo channel giả
     fakeChannel = {
@@ -50,6 +45,10 @@ describe("Product Service API (Unit/Integration)", () => {
       assertQueue: sinon.stub(),
       // Thêm bất kỳ hàm nào khác mà app.setupMessageBroker() có thể gọi
     };
+
+    // 3. Khởi tạo app
+    app = new App();
+
     
     // Stub (làm giả) hàm setupMessageBroker để sử dụng fakeChannel
     
