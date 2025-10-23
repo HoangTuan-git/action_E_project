@@ -119,16 +119,13 @@ describe("Product Service API (Unit/Integration)", () => {
       // <-- MỚI: Kiểm tra 2: Hàm publishMessage đã được gọi 1 lần
       expect(MessageBroker.publishMessage.calledOnce).to.be.true;
 
-      // <-- MỚI (Nâng cao): Kiểm tra 3: Hàm đã được gọi với ĐÚNG nội dung
       
       // Lấy các đối số mà hàm publishMessage đã được gọi
       const [queueName, message] = MessageBroker.publishMessage.firstCall.args;
       
       // <-- MỚI: Không cần parse message
       // vì hàm publishMessage của bạn nhận object, không phải Buffer
-
-      // Giả sử queue của bạn tên là 'order_queue'
-      expect(queueName).to.equal('order_queue'); 
+      expect(queueName).to.equal('orders'); 
       
       // Giả sử mock token của bạn có username là 'testuser'
       expect(message).to.have.property('username', 'testuser'); 
