@@ -34,6 +34,21 @@ jobs:
   build-and-push:
       needs: [unit-tests]
       runs-on: ubuntu-latest
+      strategy:
+        matrix:
+          include:
+            - service: auth
+              context: ./auth
+              image: auth-service
+            - service: product
+              context: ./product
+              image: product-service
+            - service: order
+              context: ./order
+              image: order-service
+            - service: api-gateway
+              context: ./api-gateway
+              image: api-gateway
       steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -47,48 +62,19 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
           
-      - name: Build and push auth-service
+      - name: Build and push ${{ matrix.service }}
         uses: docker/build-push-action@v5
         with:
-          context: ./auth
+          context: ${{ matrix.context }}
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/auth-service:latest
-          cache-from: type=gha,scope=auth
-          cache-to: type=gha,mode=max,scope=auth
-
-      - name: Build and push product-service
-        uses: docker/build-push-action@v5
-        with:
-          context: ./product
-          push: true
-          tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/product-service:latest
-          cache-from: type=gha,scope=product
-          cache-to: type=gha,mode=max,scope=product
-
-      - name: Build and push order-service
-        uses: docker/build-push-action@v5
-        with:
-          context: ./order
-          push: true
-          tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/order-service:latest
-          cache-from: type=gha,scope=order
-          cache-to: type=gha,mode=max,scope=order
-
-      - name: Build and push api-gateway
-        uses: docker/build-push-action@v5
-        with:
-          context: ./api-gateway
-          push: true
-          tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/api-gateway:latest
-          cache-from: type=gha,scope=gateway
-          cache-to: type=gha,mode=max,scope=gateway
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ matrix.image }}:latest
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
       # Summary
       - name: Create deployment summary
+        if: matrix.service == 'api-gateway'
         run: |
           echo "## 🚀 Deployment Successful" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
