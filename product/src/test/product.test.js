@@ -1,28 +1,20 @@
+// --- FIX: SET ENVIRONMENT VARIABLES FOR TEST ---
+// Đặt các biến môi trường NÀY TRƯỚC khi require app
+// Rất quan trọng để code config của bạn đọc đúng tên queue
+process.env.JWT_SECRET = 'test_secret_key_for_ci';
+process.env.QUEUE_NAME = 'products'; // Tên queue của product (nếu có)
+process.env.RABBITMQ_QUEUE = 'orders'; // Tên queue của order (quan trọng)
+// ----------------------------------------------
+
 const chai = require("chai");
 const chaiHttp = require("chai-http");
 const mongoose = require('mongoose');
 const { MongoMemoryServer } = require('mongodb-memory-server');
-const sinon = require('sinon'); // 1. Import sinon
-
-process.env.JWT_SECRET = 'test_secret_key_for_ci'; // Dùng một secret giả cho test
-process.env.QUEUE_NAME = 'products'; // Tên queue của product
-process.env.RABBITMQ_QUEUE = 'orders'; // Tên queue của order
-
-//  Stub trực tiếp MessageBroker singleton
-// Ngăn nó cố gắng kết nối thật trong app.start()
-sinon.stub(MessageBroker, 'connect').callsFake(async () => {
-  console.log('Mocked MessageBroker.connect: Bỏ qua kết nối RabbitMQ thật.');
-  return Promise.resolve();
-});
-
-// 5. Stub hàm publishMessage
-// Chúng ta sẽ reset nó trong beforeEach
-sinon.stub(MessageBroker, 'publishMessage').resolves();
-
-const App = require("../app"); // 2. Import App để khởi động dịch vụ
-const MessageBroker = require('../utils/messageBroker'); // import MessageBroker singleton
+const sinon = require('sinon');
+const App = require("../app"); // Đảm bảo đường dẫn này đúng
 const { generateMockToken } = require('./authHelper');
-require("dotenv").config();
+// Bỏ 'dotenv' vì chúng ta đang set env thủ công ở trên
+// require("dotenv").config(); 
 
 chai.use(chaiHttp);
 const expect = chai.expect;
@@ -31,10 +23,11 @@ describe("Product Service API (Unit/Integration)", () => {
   let app;
   let mongoServer;
   let authToken;
+  let fakeChannel; // Biến giữ kênh RabbitMQ giả
 
   // Hook này chạy MỘT LẦN trước tất cả các test
   before(async () => {
-    // 1. Khởi tạo MongoDB server trong bộ nhớ
+    // 1. Khởi tạo MongoDB
     mongoServer = await MongoMemoryServer.create();
     const mongoUri = mongoServer.getUri();
     await mongoose.connect(mongoUri, {
@@ -45,57 +38,88 @@ describe("Product Service API (Unit/Integration)", () => {
 
     // 2. Tạo mock token
     authToken = generateMockToken();
+    console.log('Generated mock auth token for tests.');
 
-    // 3. Khởi tạo App
+    // 3. Khởi tạo app
     app = new App();
 
-    //  Stub trực tiếp MessageBroker singleton
-    // Ngăn nó cố gắng kết nối thật trong app.start()
-    sinon.stub(MessageBroker, 'connect').callsFake(async () => {
-      console.log('Mocked MessageBroker.connect: Bỏ qua kết nối RabbitMQ thật.');
+    // 4. MOCK RABBITMQ (Rất quan trọng)
+    // Tạo channel giả
+    fakeChannel = {
+      sendToQueue: sinon.stub(),
+      assertQueue: sinon.stub(),
+      // Thêm bất kỳ hàm nào khác mà app.setupMessageBroker() có thể gọi
+    };
+    
+    // Stub (làm giả) hàm setupMessageBroker để sử dụng fakeChannel
+    
+    sinon.stub(app, 'setupMessageBroker').callsFake(() => {
+      console.log('Mocked setupMessageBroker: Bỏ qua kết nối RabbitMQ thật.');
+      app.brokerChannel = fakeChannel; 
       return Promise.resolve();
     });
-
-    // 5. Stub hàm publishMessage
-    // Chúng ta sẽ reset nó trong beforeEach
-    sinon.stub(MessageBroker, 'publishMessage').resolves();
-
-
-    // 6. Khởi động app
-    // Khi hàm start() gọi MessageBroker.connect(), nó sẽ gọi hàm GIẢ
+    
+    // 5. Khởi động app
+    // KHÔNG GỌI app.connectDB()
     app.start();
+    console.log(`Server started on port ${app.port || 3001}`); // Thêm log
   });
 
-  // Hook này chạy MỘT LẦN sau khi tất cả các test kết thúc
+  // Hook chạy MỘT LẦN sau khi tất cả các test kết thúc
   after(async () => {
-    sinon.restore(); // <-- Khôi phục lại tất cả các hàm đã bị stub (cả connect và publishMessage)
     await mongoose.disconnect();
     await mongoServer.stop();
     app.stop();
+    // Khôi phục lại các hàm thật (rất quan trọng)
+    sinon.restore(); 
     console.log('In-memory MongoDB stopped and disconnected.');
   });
 
-  // Hook này chạy TRƯỚC MỖI bài test
+  // Hook chạy TRƯỚC MỖI bài test để dọn dẹp dữ liệu
   beforeEach(async () => {
-    // Dọn dẹp database
     const collections = await mongoose.connection.db.collections();
     for (let collection of collections) {
       await collection.deleteMany({});
     }
-    
-    // <-- MỚI: Reset lại lịch sử của mock publishMessage
-    // Rất quan trọng để các bài test không ảnh hưởng lẫn nhau
-    MessageBroker.publishMessage.resetHistory();
+    // Dọn dẹp lịch sử mock (nếu có)
+    if (fakeChannel) {
+        fakeChannel.sendToQueue.resetHistory();
+    }
   });
 
-  // ... (Test block cho 'POST /' và 'GET /' không thay đổi) ...
+  // ... (describe "POST /" và "GET /" không thay đổi) ...
   
   describe("POST /", () => {
-    // ...
+    it("should create a new product with a valid token and data", async () => {
+      const productData = { name: "Laptop", description: "A powerful laptop", price: 1200 };
+      const res = await chai
+        .request(app.app)
+        .post("/")
+        .set("Authorization", `Bearer ${authToken}`)
+        .send(productData);
+
+      expect(res).to.have.status(201);
+      expect(res.body).to.have.property("_id");
+      expect(res.body).to.have.property("name", productData.name);
+    });
   });
 
   describe("GET /", () => {
-    // ...
+    beforeEach(async () => {
+        const productData = { name: "Keyboard", description: "Mechanical keyboard", price: 75 };
+        await chai.request(app.app).post("/").set("Authorization", `Bearer ${authToken}`).send(productData);
+    });
+
+    it("should get all products with a valid token", async () => {
+      const res = await chai
+        .request(app.app)
+        .get("/")
+        .set("Authorization", `Bearer ${authToken}`);
+
+      expect(res).to.have.status(200);
+      expect(res.body).to.be.an("array");
+      expect(res.body.length).to.equal(1);
+    });
   });
 
   // Test block cho việc mua hàng
@@ -103,7 +127,6 @@ describe("Product Service API (Unit/Integration)", () => {
     let createdProduct;
 
     beforeEach(async () => {
-      // Tạo một sản phẩm mẫu
       const productData = { name: "Webcam", description: "HD Webcam", price: 50 };
       const res = await chai
         .request(app.app)
@@ -112,41 +135,64 @@ describe("Product Service API (Unit/Integration)", () => {
         .send(productData);
       createdProduct = res.body;
       
-      // <-- MỚI: Reset lại mock (để bỏ qua lần gọi publish khi tạo sp, nếu có)
-      MessageBroker.publishMessage.resetHistory();
+      // Reset mock *sau khi* tạo sản phẩm, phòng trường hợp POST / cũng trigger RabbitMQ
+      fakeChannel.sendToQueue.resetHistory();
     });
 
     it("should create an order AND send a message to RabbitMQ", async () => {
       const orderData = [{ _id: createdProduct._id, quantity: 2 }];
 
-      // Hành động: Gọi API /buy
       const res = await chai
         .request(app.app)
         .post("/buy")
         .set("Authorization", `Bearer ${authToken}`)
         .send(orderData);
 
-      // --- BƯỚC 3: KIỂM TRA KẾT QUẢ ---
+      // --- SỬA LỖI BẮT ĐẦU TỪ ĐÂY ---
 
-      // Kiểm tra 1: API response vẫn trả về đúng
+      // 1. Kiểm tra response từ API
       expect(res).to.have.status(201);
       expect(res.body).to.have.property("_id");
+      expect(res.body).to.have.property("products").that.is.an("array");
+      expect(res.body.products[0]).to.have.property("_id", createdProduct._id);
 
-      // <-- MỚI: Kiểm tra 2: Hàm publishMessage đã được gọi 1 lần
-      expect(MessageBroker.publishMessage.calledOnce).to.be.true;
+      // 2. Kiểm tra xem mock RabbitMQ (fakeChannel) có được gọi không
+      expect(fakeChannel.sendToQueue.calledOnce).to.be.true;
 
+      // 3. Lấy nội dung đã được gửi cho RabbitMQ
+      // .firstCall.args là một mảng: [arg1, arg2, ...]
+      const callArgs = fakeChannel.sendToQueue.firstCall.args;
       
-      // Lấy các đối số mà hàm publishMessage đã được gọi
-      const [queueName, message] = MessageBroker.publishMessage.firstCall.args;
+      // Tham số đầu tiên (callArgs[0]) là TÊN QUEUE
+      const queueName = callArgs[0];
       
-      // <-- MỚI: Không cần parse message
-      // vì hàm publishMessage của bạn nhận object, không phải Buffer
-      expect(queueName).to.equal('orders'); 
+      // Tham số thứ hai (callArgs[1]) là NỘI DUNG (dưới dạng Buffer)
+      const messageBuffer = callArgs[1];
       
-      // Giả sử mock token của bạn có username là 'testuser'
+      // Chuyển Buffer thành JSON object để kiểm tra
+      const message = JSON.parse(messageBuffer.toString());
+
+      // 4. Kiểm tra TÊN QUEUE và NỘI DUNG MESSAGE
+      // (Giả sử queue tên là 'orders' dựa trên file MessageBroker của bạn)
+      expect(queueName).to.equal('orders');
+      
+      // (Giả sử mock token của bạn có username là 'testuser')
       expect(message).to.have.property('username', 'testuser'); 
       expect(message.products[0]).to.have.property('_id', createdProduct._id);
+      expect(message.products[0]).to.have.property('quantity', 2);
+    });
+
+    it("should return an error for an empty products array", async () => {
+      const res = await chai
+        .request(app.app)
+        .post("/buy")
+        .set("Authorization", `Bearer ${authToken}`)
+        .send([]);
+
+      expect(res).to.have.status(400);
+      
+      // Đảm bảo RabbitMQ KHÔNG được gọi nếu request không hợp lệ
+      expect(fakeChannel.sendToQueue.called).to.be.false;
     });
   });
 });
-
