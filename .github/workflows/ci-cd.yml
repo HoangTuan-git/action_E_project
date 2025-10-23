@@ -50,7 +50,9 @@ jobs:
       - name: Run unit tests
         run: |
           echo "🧪 Running unit tests..."
+          echo "Running tests for Auth Service:"
           npm test --prefix auth &
+          echo "Running tests for Product Service:"
           npm test --prefix product &
           wait
           echo "✅ All unit tests passed"
