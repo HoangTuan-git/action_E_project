@@ -5,8 +5,6 @@ npm-debug.log
 .git/
 .gitignore
 *.md
-test/
-*.test.js
 coverage/
 .vscode/
 .github/

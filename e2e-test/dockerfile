@@ -8,8 +8,11 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 
-# Sao chép toàn bộ mã nguồn (chủ yếu là thư mục test)
+# Sao chép toàn bộ mã nguồn test
 COPY . .
+
+# Verify files được copy
+RUN ls -la /app && echo "✅ Files copied successfully"
 
 # Lệnh này sẽ được chạy khi container khởi động
 # Nó sẽ thực thi kịch bản test "scripts.test" trong file package.json

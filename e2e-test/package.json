@@ -4,7 +4,7 @@
   "description": "Runs E2E tests against the live microservices",
   "main": "index.js",
   "scripts": {
-    "test": "mocha e2e.test.js --timeout 15000 --exit"
+    "test": "mocha *.test.js --timeout 60000 --exit --reporter spec"
   },
   "dependencies": {
     "chai": "^4.0.0",
