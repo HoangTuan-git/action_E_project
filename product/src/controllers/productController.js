@@ -6,7 +6,6 @@ class ProductController {
     this.createProduct = this.createProduct.bind(this);
     this.getProducts = this.getProducts.bind(this);
     this.createOrder = this.createOrder.bind(this);
-    this.getProductById = this.getProductById.bind(this);
   }
   async createProduct(req, res) {
     try {
@@ -65,21 +64,6 @@ class ProductController {
     }
   }
 
-
-  async getProductById(req, res) {
-    const { id } = req.params;
-    console.log("Fetching product with ID:", id);
-    try {
-      const productResult = await this.productService.getProductById(id);
-      if (!productResult.success) {
-        return res.status(404).json({ message: productResult.message });
-      }
-      res.status(200).json(productResult.product);
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: "Server error" });
-    }
-  }
 
   async getProducts(req, res) {
     try {
