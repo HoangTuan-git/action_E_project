@@ -38,22 +38,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js with npm cache
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: |
-            auth/package-lock.json
-            product/package-lock.json
-      - name: Install dependencies
-        run: |
-          echo "📦 Installing dependencies..."
-          npm ci --prefix auth &
-          npm ci --prefix product &
-          wait
-          echo "✅ Dependencies installed"
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
