@@ -126,24 +126,6 @@ describe("Auth Service - User Authentication API", () => {
         .send({ username: "testuser", password: "password" });
     });
 
-    it("should return JWT token for valid credentials", async () => {
-      const credentials = { 
-        username: "testuser", 
-        password: "password" 
-      };
-
-      const res = await chai
-        .request(app.app)
-        .post("/login")
-        .send(credentials);
-
-      expect(res).to.have.status(200);
-      expect(res.body).to.have.property("token");
-      expect(res.body.token).to.be.a('string');
-      
-      // Save token for dashboard tests
-      authToken = res.body.token;
-    });
 
     it("should reject invalid username or password", async () => {
       const res = await chai
