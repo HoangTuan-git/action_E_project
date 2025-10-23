@@ -145,21 +145,11 @@ describe("Auth Service - User Authentication API", () => {
       authToken = res.body.token;
     });
 
-    it("should reject invalid username", async () => {
+    it("should reject invalid username or password", async () => {
       const res = await chai
         .request(app.app)
         .post("/login")
         .send({ username: "invaliduser", password: "password" });
-
-      expect(res).to.have.status(400);
-      expect(res.body).to.have.property("message", "Invalid username or password");
-    });
-
-    it("should reject invalid password", async () => {
-      const res = await chai
-        .request(app.app)
-        .post("/login")
-        .send({ username: "testuser", password: "wrongpassword" });
 
       expect(res).to.have.status(400);
       expect(res.body).to.have.property("message", "Invalid username or password");

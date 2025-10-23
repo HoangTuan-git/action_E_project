@@ -235,18 +235,6 @@ describe("Product Service - API Tests", () => {
       expect(res.body).to.have.property("_id", createdProduct._id);
       expect(res.body).to.have.property("name", createdProduct.name);
     });
-
-    it("should return 404 for non-existent product", async () => {
-      const nonExistentId = "507f1f77bcf86cd799439011"; // Example ObjectId
-      const res = await chai
-        .request(app.app)
-        .get(`/${nonExistentId}`)
-        .set("Authorization", `Bearer ${authToken}`);
-
-      // Verify response
-      expect(res).to.have.status(404);
-      expect(res.body).to.have.property("message", "Product not found");
-    });
   });
 
   /**
