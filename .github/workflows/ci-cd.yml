@@ -41,8 +41,10 @@ jobs:
       - name: Cache MongoMemoryServer binaries
         uses: actions/cache@v4
         with:
-          path: ~/.cache/mongodb-binaries
-          key: mongodb-binary-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}
+          path: |
+            ~/.cache/mongodb-binaries
+            ~/mongodb-binaries
+          key: mongodb-binary-${{ runner.os }}-7.0.14
           restore-keys: |
             mongodb-binary-${{ runner.os }}-
 
@@ -50,6 +52,8 @@ jobs:
         env:
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           NODE_ENV: test
+          MONGOMS_DOWNLOAD_DIR: ~/.cache/mongodb-binaries
+          MONGOMS_VERSION: 7.0.14
 
   build-and-push:
       needs: [unit-tests]
