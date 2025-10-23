@@ -109,11 +109,6 @@ services:
       - eproject-network
     command: ["npm", "test"]
 
-# KHÔNG DÙNG volumes
-# volumes:
-#   mongodb_data:
-#   rabbitmq_data:
-
 networks:
   eproject-network:
     driver: bridge
