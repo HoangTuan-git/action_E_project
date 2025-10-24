@@ -6,9 +6,22 @@ class ProductController {
     this.createProduct = this.createProduct.bind(this);
     this.getProducts = this.getProducts.bind(this);
     this.createOrder = this.createOrder.bind(this);
-    
+    this.getProductById = this.getProductById.bind(this);
   }
 
+  async getProductById(req, res) {
+    try {
+      const productId = req.params.id;
+      const result = await this.productService.getProductById(productId);
+      if (!result.success) {
+        return res.status(404).json({ message: result.message });
+      }
+      res.status(200).json(result.product);
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Server error" });
+    }
+  }
 
   async createProduct(req, res) {
     try {
