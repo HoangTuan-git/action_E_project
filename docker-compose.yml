@@ -55,8 +55,9 @@ services:
       - JWT_SECRET=your_jwt_secret_key_here
       - MONGODB_PRODUCT_URI=mongodb://mongodb:27017/product
       - RABBITMQ_URI=amqp://admin:admin@rabbitmq:5672
-      - QUEUE_NAME=products
       - ORDER_SERVICE_URL=http://order-service:3002
+      - RABBITMQ_QUEUE_ORDER="orders"
+      - RABBITMQ_QUEUE_PRODUCT="products"
     depends_on:
       - mongodb
       - rabbitmq
@@ -74,7 +75,8 @@ services:
       - JWT_SECRET=your_jwt_secret_key_here
       - MONGODB_ORDER_URI=mongodb://mongodb:27017/order
       - RABBITMQ_URI=amqp://admin:admin@rabbitmq:5672
-      - RABBITMQ_QUEUE=orders
+      - RABBITMQ_QUEUE_ORDER="orders"
+      - RABBITMQ_QUEUE_PRODUCT="products"
     depends_on:
       - mongodb
       - rabbitmq

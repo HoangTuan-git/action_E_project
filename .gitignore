@@ -35,3 +35,7 @@ logs
 #package-lock.json
 yarn.lock
 pnpm-lock.yaml
+
+#personal file
+ci-cd-e2e.yml
+docker-compose.e2e.ci.yml
