@@ -22,6 +22,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '18'
+          cache: 'npm'  # Built-in npm cache (fallback)
       
       # Cache node_modules directly (faster than ~/.npm)
       - name: Cache node_modules
