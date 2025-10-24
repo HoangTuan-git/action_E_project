@@ -9,8 +9,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Cài dependencies, dùng cache npm nội bộ để tăng tốc độ và tránh tải lại toàn bộ khi rebuild
-RUN --mount=type=cache,target=/root/.npm \
-    npm ci --only=production
+RUN npm ci --only=production
 
 # ===============================
 # STAGE 2 - RUNTIME
