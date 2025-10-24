@@ -1,5 +1,4 @@
 const ProductService = require("../services/productsService");
-const axios = require("axios");
 class ProductController {
   constructor() {
     this.productService = new ProductService();

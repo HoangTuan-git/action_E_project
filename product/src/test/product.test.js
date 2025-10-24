@@ -69,7 +69,7 @@ describe("Product Service - API Tests", () => {
    */
   before(async () => {
     // Start in-memory MongoDB
-    mongoServer = await MongoMemoryServer.create();
+    mongoServer = await MongoMemoryServer.create({});
     const mongoUri = mongoServer.getUri();
     
     await mongoose.connect(mongoUri, {
