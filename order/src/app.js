@@ -1,6 +1,7 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const config = require("./config");
+const morgan = require("morgan");
 const messageBroker = require("./utils/messageBroker");
 const orderRoutes = require("./routes/orderRoutes");
 const OrderService = require("./services/orderService");
@@ -9,6 +10,7 @@ class App {
     this.app = express();
     this.connectDB();
     this.setupOrderConsumer();
+    this.setMorGan();
     this.setMiddlewares();
     this.setRoutes();
   }
@@ -24,6 +26,9 @@ class App {
   async disconnectDB() {
     await mongoose.disconnect();
     console.log("MongoDB disconnected");
+  }
+  setMorGan() {
+    this.app.use(morgan("dev"));
   }
    setMiddlewares() {
     this.app.use(express.json());

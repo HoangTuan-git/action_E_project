@@ -3,11 +3,13 @@ const mongoose = require("mongoose");
 const config = require("./config");
 const MessageBroker = require("./utils/messageBroker");
 const productsRouter = require("./routes/productRoutes");
+const morgan = require("morgan");
 require("dotenv").config();
 
 class App {
   constructor() {
     this.app = express();
+    this.setMorGan();
     this.setMiddlewares();
     this.setRoutes();
   }
@@ -24,6 +26,9 @@ class App {
   async disconnectDB() {
     await mongoose.disconnect();
     console.log("MongoDB disconnected");
+  }
+  setMorGan() {
+    this.app.use(morgan("dev"));
   }
 
   setMiddlewares() {

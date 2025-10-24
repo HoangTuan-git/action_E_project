@@ -3,11 +3,14 @@ const httpProxy = require("http-proxy");
 const dotenv = require("dotenv");
 dotenv.config();
 const proxy = httpProxy.createProxyServer();
+const morgan = require("morgan");
 const app = express();
 const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || "http://localhost:3000";
 const PRODUCT_SERVICE_URL = process.env.PRODUCT_SERVICE_URL || "http://localhost:3001";
 const ORDER_SERVICE_URL = process.env.ORDER_SERVICE_URL || "http://localhost:3002";
 
+// Use morgan for logging
+app.use(morgan("dev"));
 // Health check endpoint
 app.get("/health", (req, res) => {
   res.status(200).json({ status: "ok" });

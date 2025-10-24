@@ -2,11 +2,13 @@ const express = require("express");
 const mongoose = require("mongoose");
 const config = require("./config");
 const AuthRoutes = require("./routes/authRoutes");
+const morgan = require("morgan");
 const AuthController = require("./controllers/authController");
 
 class App {
   constructor() {
     this.app = express();
+    this.setMorGan();
     this.authController = new AuthController();
     this.setMiddlewares();
     this.setRoutes();
@@ -24,6 +26,9 @@ class App {
   async disconnectDB() {
     await mongoose.disconnect();
     console.log("MongoDB disconnected");
+  }
+  setMorGan() {
+    this.app.use(morgan("dev"));
   }
 
   setMiddlewares() {
