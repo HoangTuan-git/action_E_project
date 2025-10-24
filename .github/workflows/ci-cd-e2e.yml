@@ -157,16 +157,14 @@ jobs:
       # Wait for all services healthy
       - name: Wait for services
         run: |
+          echo "Waiting for api-gateway to be healthy..."
           timeout 90 bash -c '
-            while true; do
-              health_status=$(docker compose -f docker-compose.e2e.ci.yml ps --format json | jq -r ".[] | select(.Service==\"api-gateway\") | .Health")
-              if [ "$health_status" = "healthy" ]; then
-                echo "✅ API Gateway is healthy!"
-                break
-              fi
-              echo "⏳ Waiting for api-gateway... (current: $health_status)"
+            until [ "$(docker inspect --format="{{.State.Health.Status}}" api-gateway 2>/dev/null)" = "healthy" ]; do
+              status=$(docker inspect --format="{{.State.Health.Status}}" api-gateway 2>/dev/null || echo "starting")
+              echo "⏳ Waiting for api-gateway... (current: $status)"
               sleep 3
             done
+            echo "✅ API Gateway is healthy!"
           '
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -183,8 +181,8 @@ jobs:
       - name: Cleanup E2E environment
         if: always()
         run: |
-          docker-compose -f docker-compose.e2e.ci.yml logs
-          docker-compose -f docker-compose.e2e.ci.yml down -v
+          docker compose -f docker-compose.e2e.ci.yml logs
+          docker compose -f docker-compose.e2e.ci.yml down -v
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
 
