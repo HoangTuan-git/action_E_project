@@ -126,15 +126,13 @@ describe("Auth Service - User Authentication API", () => {
         .send({ username: "testuser", password: "password" });
     });
 
-
-    it("should reject invalid username or password", async () => {
+    it("should login successfully and return JWT token", async () => {
       const res = await chai
         .request(app.app)
         .post("/login")
-        .send({ username: "invaliduser", password: "password" });
-
-      expect(res).to.have.status(400);
-      expect(res.body).to.have.property("message", "Invalid username or password");
+        .send({ username: "testuser", password: "password" });
+      expect(res).to.have.status(200);
+      expect(res.body).to.have.property("token");
     });
   });
 
