@@ -28,7 +28,9 @@ class App {
     console.log("MongoDB disconnected");
   }
   setMorGan() {
-    this.app.use(morgan("dev"));
+    if(process.env.NODE_ENV !== "test"){
+      this.app.use(morgan("dev"));
+    }
   }
 
   setMiddlewares() {

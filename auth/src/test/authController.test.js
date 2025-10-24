@@ -10,7 +10,7 @@
  * - MongoDB: In-memory (mongodb-memory-server)
  * - Auth: JWT tokens generated on login
  */
-
+process.env.NODE_ENV = 'test';
 const chai = require("chai");
 const chaiHttp = require("chai-http");
 const mongoose = require('mongoose');
