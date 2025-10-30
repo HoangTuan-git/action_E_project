@@ -82,12 +82,12 @@ class ProductController {
   }
   async getProductsById(req,res){
     try {
-      const {id} = req.params;
+      const id = req.params.id;
       const products = await this.productService.getProductById(id);
-      if(!products){
+      if(!products.success){
         return res.status(404).json({message:"Product not found"});
       }
-      return res.status(200).json(products);
+      return res.status(200).json(products.product);
     } catch (error) {
       console.log(error);
       return res.status(500).json({message:"EError server"});
