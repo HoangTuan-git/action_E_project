@@ -9,4 +9,5 @@ router.post("/", isAuthenticated, productController.createProduct);
 router.post("/buy", isAuthenticated, productController.createOrder);
 router.get("/", isAuthenticated, productController.getProducts);
 router.get("/:id", isAuthenticated, productController.getProductById);
+
 module.exports = router;
