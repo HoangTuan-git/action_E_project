@@ -6,7 +6,7 @@ class ProductController {
     this.createProduct = this.createProduct.bind(this);
     this.getProducts = this.getProducts.bind(this);
     this.createOrder = this.createOrder.bind(this);
-    this.getProductById= this.getProductById.bind(this);
+    this.getProductById = this.getProductById.bind(this);
   }
   async getProductById(req, res){
     try {
@@ -17,7 +17,8 @@ class ProductController {
       }
       return res.status(200).json(pd.product);
     } catch (error) {
-      return res.status(500).json({message:"server error"});     
+      return res.status(500).json({message:"server error"});
+      
     }
   }
   async createProduct(req, res) {
