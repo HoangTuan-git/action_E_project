@@ -1,15 +1,25 @@
 const ProductService = require("../services/productsService");
+const messageBroker = require("../utils/messageBroker");
 class ProductController {
   constructor() {
     this.productService = new ProductService();
     this.createProduct = this.createProduct.bind(this);
     this.getProducts = this.getProducts.bind(this);
     this.createOrder = this.createOrder.bind(this);
-    this.getProductsById = this.getProductsById.bind(this);
+    this.getProductById= this.getProductById.bind(this);
   }
-
-
-
+  async getProductById(req, res){
+    try{
+      const id = req.params.id;
+      const pd = await this.productService.getProductById(id);
+      if(!pd.success){
+        return res.status(404).json({message: pd.message});
+      }
+      return res.status(200).json(pd.product);
+    }catch(error){
+      return res.status(500).json({message: "server error"});
+    }
+  }
   async createProduct(req, res) {
     try {
       const product = req.body;
@@ -80,19 +90,7 @@ class ProductController {
       res.status(500).json({ message: "Server error" });
     }
   }
-  async getProductsById(req,res){
-    try {
-      const id = req.params.id;
-      const products = await this.productService.getProductById(id);
-      if(!products.success){
-        return res.status(404).json({message:"Product not found"});
-      }
-      return res.status(200).json(products.product);
-    } catch (error) {
-      console.log(error);
-      return res.status(500).json({message:"EError server"});
-    }
-  }
+ 
 }
 
 module.exports = ProductController;
