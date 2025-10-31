@@ -212,5 +212,206 @@ describe("Product Service - API Tests", () => {
       }
     });
   });
+  /**
+   * TEST SUITE: POST /buy (Create Order)
+   * 
+   * Most complex test suite - validates order creation with RabbitMQ integration
+   * 
+   * Flow:
+   * 1. Create a test product (in beforeEach)
+   * 2. Send order request with product ID and quantity
+   * 3. Verify order created in database
+   * 4. Verify RabbitMQ message published to 'orders' queue
+   * 5. Verify message contains correct order details
+   * 
+   * Important: Uses publishStub.resetHistory() to ensure clean state
+   */
+  describe("POST /buy - Create Order", () => {
+    let createdProduct;
+
+    // Setup: Create a test product before each test
+    beforeEach(async () => {
+      const testProduct = { 
+        name: "Webcam", 
+        description: "HD Webcam", 
+        price: 50 
+      };
+      
+      const res = await chai
+        .request(app.app)
+        .post("/")
+        .set("Authorization", `Bearer ${authToken}`)
+        .send(testProduct);
+      
+      createdProduct = res.body;
+      
+      // IMPORTANT: Reset stub history after product creation
+      // This ensures our order tests only count the BUY operation's publish call
+      messageBrokerStubs.publish.resetHistory();
+    });
+
+    it("should create an order and publish message to RabbitMQ", async () => {
+      const orderData = [
+        { 
+          _id: createdProduct._id, 
+          quantity: 2 
+        }
+      ];
+
+      const res = await chai
+        .request(app.app)
+        .post("/buy")
+        .set("Authorization", `Bearer ${authToken}`)
+        .send(orderData);
+
+      // Step 1: Verify HTTP response
+      expect(res).to.have.status(201);
+      expect(res.body).to.have.property("_id");
+      expect(res.body).to.have.property("products").that.is.an("array");
+      expect(res.body).to.have.property("status", "pending");
+      expect(res.body).to.have.property("username", "testuser");
+      
+      // Verify product ID in order (handle ObjectId conversion)
+      const responseProductId = res.body.products[0]._id;
+      expect(responseProductId.toString()).to.equal(createdProduct._id);
+
+      // Step 2: Verify RabbitMQ publish was called once
+      expect(messageBrokerStubs.publish.calledOnce).to.be.true;
+
+      // Step 3: Extract published message details
+      const publishCallArgs = messageBrokerStubs.publish.firstCall.args;
+      const queueName = publishCallArgs[0];
+      const publishedMessage = publishCallArgs[1];
+      
+      // Step 4: Verify queue name
+      expect(queueName).to.equal('orders');
+      
+      // Step 5: Verify message structure
+      expect(publishedMessage).to.have.property('username', 'testuser'); 
+      expect(publishedMessage).to.have.property('orderId');
+      expect(publishedMessage.products).to.be.an('array');
+      expect(publishedMessage.products).to.have.lengthOf(1);
+      
+      // Step 6: Verify product details in message (convert ObjectId to string for comparison)
+      expect(publishedMessage.products[0]._id.toString()).to.equal(createdProduct._id);
+      expect(publishedMessage.products[0]).to.have.property('quantity', 2);
+      expect(publishedMessage.products[0]).to.have.property('name', 'Webcam');
+      expect(publishedMessage.products[0]).to.have.property('price', 50);
+    });
+
+    it("should return 400 error for empty products array", async () => {
+      const res = await chai
+        .request(app.app)
+        .post("/buy")
+        .set("Authorization", `Bearer ${authToken}`)
+        .send([]);
+
+      // Verify error response
+      expect(res).to.have.status(400);
+      
+      // Verify RabbitMQ publish was NOT called (invalid request)
+      expect(messageBrokerStubs.publish.called).to.be.false;
+    });
+  });/**
+   * TEST SUITE: POST /buy (Create Order)
+   * 
+   * Most complex test suite - validates order creation with RabbitMQ integration
+   * 
+   * Flow:
+   * 1. Create a test product (in beforeEach)
+   * 2. Send order request with product ID and quantity
+   * 3. Verify order created in database
+   * 4. Verify RabbitMQ message published to 'orders' queue
+   * 5. Verify message contains correct order details
+   * 
+   * Important: Uses publishStub.resetHistory() to ensure clean state
+   */
+  describe("POST /buy - Create Order", () => {
+    let createdProduct;
+
+    // Setup: Create a test product before each test
+    beforeEach(async () => {
+      const testProduct = { 
+        name: "Webcam", 
+        description: "HD Webcam", 
+        price: 50 
+      };
+      
+      const res = await chai
+        .request(app.app)
+        .post("/")
+        .set("Authorization", `Bearer ${authToken}`)
+        .send(testProduct);
+      
+      createdProduct = res.body;
+      
+      // IMPORTANT: Reset stub history after product creation
+      // This ensures our order tests only count the BUY operation's publish call
+      messageBrokerStubs.publish.resetHistory();
+    });
+
+    it("should create an order and publish message to RabbitMQ", async () => {
+      const orderData = [
+        { 
+          _id: createdProduct._id, 
+          quantity: 2 
+        }
+      ];
+
+      const res = await chai
+        .request(app.app)
+        .post("/buy")
+        .set("Authorization", `Bearer ${authToken}`)
+        .send(orderData);
+
+      // Step 1: Verify HTTP response
+      expect(res).to.have.status(201);
+      expect(res.body).to.have.property("_id");
+      expect(res.body).to.have.property("products").that.is.an("array");
+      expect(res.body).to.have.property("status", "pending");
+      expect(res.body).to.have.property("username", "testuser");
+      
+      // Verify product ID in order (handle ObjectId conversion)
+      const responseProductId = res.body.products[0]._id;
+      expect(responseProductId.toString()).to.equal(createdProduct._id);
+
+      // Step 2: Verify RabbitMQ publish was called once
+      expect(messageBrokerStubs.publish.calledOnce).to.be.true;
+
+      // Step 3: Extract published message details
+      const publishCallArgs = messageBrokerStubs.publish.firstCall.args;
+      const queueName = publishCallArgs[0];
+      const publishedMessage = publishCallArgs[1];
+      
+      // Step 4: Verify queue name
+      expect(queueName).to.equal('orders');
+      
+      // Step 5: Verify message structure
+      expect(publishedMessage).to.have.property('username', 'testuser'); 
+      expect(publishedMessage).to.have.property('orderId');
+      expect(publishedMessage.products).to.be.an('array');
+      expect(publishedMessage.products).to.have.lengthOf(1);
+      
+      // Step 6: Verify product details in message (convert ObjectId to string for comparison)
+      expect(publishedMessage.products[0]._id.toString()).to.equal(createdProduct._id);
+      expect(publishedMessage.products[0]).to.have.property('quantity', 2);
+      expect(publishedMessage.products[0]).to.have.property('name', 'Webcam');
+      expect(publishedMessage.products[0]).to.have.property('price', 50);
+    });
+
+    it("should return 400 error for empty products array", async () => {
+      const res = await chai
+        .request(app.app)
+        .post("/buy")
+        .set("Authorization", `Bearer ${authToken}`)
+        .send([]);
+
+      // Verify error response
+      expect(res).to.have.status(400);
+      
+      // Verify RabbitMQ publish was NOT called (invalid request)
+      expect(messageBrokerStubs.publish.called).to.be.false;
+    });
+  });
 });
 
