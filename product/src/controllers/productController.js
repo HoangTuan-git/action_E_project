@@ -6,25 +6,11 @@ class ProductController {
     this.createProduct = this.createProduct.bind(this);
     this.getProducts = this.getProducts.bind(this);
     this.createOrder = this.createOrder.bind(this);
-    this.getProductById = this.getProductById.bind(this);
   }
-  async getProductById(req,res){
-    try {
-      const {id}= req.params;
-      const pd =await this.productService.getProductById(id);
-      if(!pd.success){
-        return res.status(404).json({message: pd.message});
-      }
-      return res.status(200).json(pd.product);
-    } catch (error) {
-      return res.status(404).json({message: "server  error"});
-      
-    }
-  }
+  
   async createProduct(req, res) {
     try {
       const product = req.body;
-      
       // Input validation
       if (!product.name || !product.price) {
         return res.status(400).json({ 
